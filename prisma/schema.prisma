@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  role          String    @default("customer")
+  firstName     String
+  lastName      String
+  organization  String
+  labName       String
+  phone         String?
+  sessions      Session[]
+  accounts      Account[]
+  orders        Order[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([issuer, accountId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Order {
+  id                  String          @id @default(cuid())
+  orderNumber         String          @unique
+  userId              String
+  service             String          @default("SANGER")
+  orderName           String
+  poNumber            String?
+  specialInstructions String?
+  status              String          @default("SUBMITTED")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  completedAt         DateTime?
+  user                User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  samples             Sample[]
+  result              Result?
+  statusHistory       StatusHistory[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Sample {
+  id            String  @id @default(cuid())
+  orderId       String
+  position      Int
+  sampleName    String
+  templateType  String
+  concentration String?
+  primerName    String
+  primerSource  String
+  notes         String?
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, position])
+  @@index([orderId])
+}
+
+model Result {
+  id           String   @id @default(cuid())
+  orderId      String   @unique
+  originalName String
+  storedName   String   @unique
+  mimeType     String
+  size         Int
+  uploadedAt   DateTime @default(now())
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model StatusHistory {
+  id        String   @id @default(cuid())
+  orderId   String
+  status    String
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}

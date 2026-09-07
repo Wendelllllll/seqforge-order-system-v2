@@ -1,0 +1,5 @@
+SeqForge Sanger Sequencing Demo Result
+Order: SF-26090001
+Sample: TP53-A01
+Sequence: ATGCGTACGTTAGCTAGCTAGGCTAACCGT
+Quality: Demo data only — not for scientific use.

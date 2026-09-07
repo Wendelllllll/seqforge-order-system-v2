@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:not(:disabled),
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+::selection {
+  color: #083344;
+  background: #a5f3fc;
+}
+
+@layer components {
+  .button-primary {
+    @apply inline-flex min-h-10 items-center gap-2 bg-cyan-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-10 items-center gap-2 border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .field-label {
+    @apply block text-sm font-semibold text-slate-700;
+  }
+
+  .field-input {
+    @apply block min-h-11 w-full border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100;
+  }
+
+  .panel {
+    @apply border border-slate-200 bg-white shadow-sm;
+  }
+
+  .panel-heading {
+    @apply flex flex-col justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:px-6;
+  }
+
+  .eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-700;
+  }
+
+  .service-chip {
+    @apply inline-flex w-fit items-center gap-1.5 border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800;
+  }
+
+  .metric-pill {
+    @apply inline-flex w-fit items-center bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600;
+  }
+
+  .data-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .data-table th {
+    @apply border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500;
+  }
+
+  .data-table td {
+    @apply border-b border-slate-100 px-4 py-4 align-middle text-slate-700;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}
