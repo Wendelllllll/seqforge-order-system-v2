@@ -1,3 +1,4 @@
+import { OrderPricing } from "@/components/order-pricing";
 import type { ReactionDraft } from "@/lib/order-intake";
 
 type ManifestSample = {
@@ -9,20 +10,20 @@ type ManifestSample = {
 export type ManifestOrder = {
   orderName: string; orderNumber?: string; poNumber: string | null; specialInstructions: string | null;
   priority: string; container: string; submissionMode: string; intakeVersion?: number;
-  samples: ManifestSample[];
+  samples: ManifestSample[]; pricingSnapshot?: unknown;
 };
 
 export function OrderManifest({ order }: { order: ManifestOrder }) {
   const reactions = order.samples.flatMap((sample) => sample.reactions.map((reaction, index) => ({ sample, reaction, index })));
   return <section className="panel submission-manifest">
     <div className="panel-heading">
-      <div><p className="eyebrow">Submission manifest · Demo</p><h2 className="mt-1 text-lg font-bold">{order.orderName || "Untitled order"}</h2>{order.orderNumber ? <p className="mt-1 font-mono text-sm">{order.orderNumber}</p> : null}</div>
+      <div><p className="eyebrow">Submission manifest · V3</p><h2 className="mt-1 text-lg font-bold">{order.orderName || "Untitled order"}</h2>{order.orderNumber ? <p className="mt-1 font-mono text-sm">{order.orderNumber}</p> : null}</div>
       <span className="metric-pill">{order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} · {reactions.length} {reactions.length === 1 ? "reaction" : "reactions"}</span>
     </div>
     <div className="space-y-3 border-b border-slate-200 p-5 text-sm">
       {order.intakeVersion === 1 ? <p>Legacy demo order: service and container choices were not recorded. Each original entry is preserved as one sample and one reaction.</p> : <p><strong>Priority:</strong> {order.priority} · <strong>Mode:</strong> {order.submissionMode} · <strong>Container:</strong> {order.container}</p>}
       <p><strong>PO / reference:</strong> {order.poNumber || "Not provided"}</p>
-      <p className="text-slate-500">Service, preparation, stored primers, and synthesis requests require lab confirmation. This demo does not confirm pricing, turnaround, shipping, or sample acceptance.</p>
+      <p className="text-slate-500">Service, preparation, stored primers, and synthesis requests require lab confirmation. Turnaround, delivery and sample acceptance require lab confirmation.</p>
     </div>
     <div className="overflow-x-auto">
       <table className="data-table min-w-[780px]">
@@ -56,5 +57,6 @@ export function OrderManifest({ order }: { order: ManifestOrder }) {
       </table>
     </div>
     <div className="border-t border-slate-200 p-5 text-sm"><strong>Instructions</strong><p className="mt-2 whitespace-pre-wrap">{order.specialInstructions || "No additional instructions."}</p></div>
+    <OrderPricing snapshot={order.pricingSnapshot} historical={Boolean(order.orderNumber)} />
   </section>;
 }

@@ -3,6 +3,8 @@
 import { LoaderCircle, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { OrderPricing } from "@/components/order-pricing";
+import { priceOrder } from "@/lib/pricing";
 import { OrderManifest } from "@/components/order-manifest";
 import { Field, SampleEditor, SelectField, TextField } from "@/components/sample-editor";
 import { blankOrder, blankSample, CONTAINERS, issueLabel, MAX_IMPORT_BYTES, MAX_REACTIONS, MODES, orderSchema, PRIORITIES, reactionCount, type OrderDraft, type SampleDraft } from "@/lib/order-intake";
@@ -15,6 +17,7 @@ export function OrderForm() {
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
+  const submissionKey = useRef("");
   const [bulkText, setBulkText] = useState("");
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [pendingImport, setPendingImport] = useState<SampleDraft[] | null>(null);
@@ -24,6 +27,7 @@ export function OrderForm() {
   const count = reactionCount(draft.samples);
 
   function update<K extends keyof OrderDraft>(field: K, value: OrderDraft[K]) {
+    submissionKey.current = "";
     setDraft((current) => ({ ...current, [field]: value }));
     setPendingImport(null);
     setMessage("");
@@ -52,11 +56,12 @@ export function OrderForm() {
   async function submitOrder() {
     if (!review || submitting.current) return;
     submitting.current = true;
+    submissionKey.current ||= crypto.randomUUID();
     setLoading(true);
     setErrors([]);
     try {
       const response = await fetch("/api/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(review),
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": submissionKey.current }, body: JSON.stringify(review),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -93,17 +98,17 @@ export function OrderForm() {
   if (review) return <div className="space-y-6">
     <h2 ref={headingRef} tabIndex={-1} className="text-xl font-bold">Review your order</h2>
     <p className="text-sm text-slate-600">Check the labels on your physical samples against this manifest. Your order is saved only after you confirm below.</p>
-    <OrderManifest order={review} />
+    <OrderManifest order={{ ...review, pricingSnapshot: priceOrder(review) }} />
     {errorPanel}
     <div className="flex flex-wrap justify-end gap-3">
       <button type="button" disabled={loading} onClick={() => { setReview(null); setErrors([]); }} className="button-secondary">Back to edit</button>
-      <button type="button" disabled={loading} onClick={submitOrder} className="button-primary">{loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}Confirm and submit demo order</button>
+      <button type="button" disabled={loading} onClick={submitOrder} className="button-primary">{loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}Confirm and submit order</button>
     </div>
   </div>;
 
   return <form method="post" onSubmit={reviewOrder} className="space-y-6">
     <section className="panel">
-      <div className="panel-heading"><div><p className="eyebrow">Step 1</p><h2 className="mt-1 text-lg font-bold">Project and service</h2></div><span className="service-chip">Sanger sequencing · Demo</span></div>
+      <div className="panel-heading"><div><p className="eyebrow">Step 1</p><h2 className="mt-1 text-lg font-bold">Project and service</h2></div><span className="service-chip">Sanger sequencing · V3</span></div>
       <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
         <TextField label="Order name / reference *" value={draft.orderName} onChange={(v) => update("orderName", v)} required maxLength={120} />
         <TextField label="PO number (optional)" value={draft.poNumber} onChange={(v) => update("poNumber", v)} maxLength={80} />
@@ -112,7 +117,7 @@ export function OrderForm() {
         <SelectField label="Submission mode" value={draft.submissionMode} options={MODES} onChange={(v) => update("submissionMode", v as OrderDraft["submissionMode"])} />
         <p className="self-center text-sm leading-6 text-slate-500">Standard: DNA and primer requests are recorded separately. Pre-mixed / Ready to load: use one physical tube or well per reaction and choose “Included in mix.” Confirm preparation instructions with the lab.</p>
         <div className="sm:col-span-2"><Field label="Special instructions (optional)"><textarea className="field-input min-h-24" maxLength={2000} value={draft.specialInstructions} onChange={(e) => update("specialInstructions", e.target.value)} /></Field></div>
-        <p className="text-sm text-slate-500 sm:col-span-2">Requested services and same-day availability require confirmation. No turnaround or price is committed by this demo. Plate coordinates use A1–H12; the lab must confirm usable wells and controls.</p>
+        <p className="text-sm text-slate-500 sm:col-span-2">Requested services and same-day availability require confirmation. Sequencing rates appear below; additional services require price confirmation. Plate coordinates use A1–H12; the lab must confirm usable wells and controls.</p>
       </div>
     </section>
 
@@ -140,6 +145,7 @@ export function OrderForm() {
       </div>
     </section>
     {errorPanel}
+    <OrderPricing snapshot={priceOrder(draft)} />
     <div className="flex justify-end gap-3"><button type="button" onClick={() => router.back()} className="button-secondary">Cancel</button><button type="submit" className="button-primary">Review order</button></div>
   </form>;
 }

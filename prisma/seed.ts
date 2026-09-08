@@ -29,6 +29,10 @@ const users = [
 ] as const;
 
 async function seed() {
+  const database = new URL(process.env.DATABASE_URL || "");
+  if (process.env.NODE_ENV === "production" || process.env.BETTER_AUTH_URL !== "http://localhost:3000" || !["localhost", "127.0.0.1"].includes(database.hostname)) {
+    throw new Error("Demo seeding is permitted only against a local development database and localhost application.");
+  }
   for (const user of users) {
     let existing = await prisma.user.findUnique({
       where: { email: user.email },

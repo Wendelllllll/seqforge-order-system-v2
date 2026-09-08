@@ -35,7 +35,7 @@ export default async function OrdersPage() {
                   <tr key={order.id} className="hover:bg-slate-50/70">
                     <td className="font-mono text-xs font-bold text-slate-900">{order.orderNumber}</td>
                     <td className="font-semibold text-slate-900">{order.orderName}</td>
-                    <td>Sanger{order.intakeVersion === 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
+                    <td>Sanger{order.intakeVersion >= 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
                     <td>{formatDate(order.createdAt)}</td>
                     <td>{order.samples.length} / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)}</td>
                     <td><StatusBadge status={order.status} /></td>

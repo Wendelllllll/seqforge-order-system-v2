@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { blankOrder, blankReaction } from "../src/lib/order-intake";
 
@@ -6,7 +7,7 @@ const origin = "http://localhost:3000";
 async function request(path: string, cookie = "", body?: unknown, method = body === undefined ? "GET" : "POST") {
   return fetch(origin + path, {
     method, redirect: "manual",
-    headers: { origin, ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    headers: { "Idempotency-Key": randomUUID(), origin, ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
@@ -37,17 +38,24 @@ async function main() {
   assert.equal((await request("/api/orders", "", order)).status, 401);
   assert.equal((await request("/api/orders", admin, order)).status, 401);
   assert.equal((await request("/api/orders", customer, { ...order, priority: "Forged" })).status, 400);
-  assert.equal((await fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, "Content-Type": "application/json", origin }, body: "{" })).status, 400);
-  assert.equal((await fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, "Content-Type": "application/json", origin: "https://example.invalid" }, body: JSON.stringify(order) })).status, 403);
-  const created = await request("/api/orders", customer, order);
+  assert.equal((await fetch(origin + "/api/orders", { method: "POST", headers: { "Idempotency-Key": randomUUID(), cookie: customer, "Content-Type": "application/json", origin }, body: "{" })).status, 400);
+  assert.equal((await fetch(origin + "/api/orders", { method: "POST", headers: { "Idempotency-Key": randomUUID(), cookie: customer, "Content-Type": "application/json", origin: "https://example.invalid" }, body: JSON.stringify(order) })).status, 403);
+  const key = randomUUID();
+  const submit = (body: unknown) => fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(body) });
+  const created = await submit({ ...order, pricingSnapshot: { subtotalCents: 1 } });
   assert.equal(created.status, 201);
   const { id } = await created.json();
+  const retry = await submit(order);
+  assert.equal(retry.status, 201);
+  assert.equal((await retry.json()).id, id);
+  assert.equal((await submit({ ...order, orderName: "Changed payload" })).status, 409);
   for (const path of [`/orders/${id}`, `/manifest/${id}`]) {
     const mine = await request(path, customer);
     assert.equal(mine.status, 200);
     const html = await mine.text();
     assert.ok(html.includes("DEMO-STORED-7"), "Stored-primer details should persist");
     assert.ok(html.includes("Same day requested"));
+    assert.ok(html.includes("$9.00"), "Server calculates two plate Standard reactions despite forged client pricing");
     const other = await request(path, otherCustomer);
     assert.equal(other.status, 404);
     assert.ok(!(await other.text()).includes(order.orderName), "Other customers must not receive order content");

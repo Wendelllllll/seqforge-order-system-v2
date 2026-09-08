@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -75,9 +75,6 @@ model Verification {
 model Order {
   id                  String          @id @default(cuid())
   orderNumber         String          @unique
-  submissionKey       String?
-  submissionHash      String?
-  pricingSnapshot     Json?
   userId              String
   service             String          @default("SANGER")
   intakeVersion       Int             @default(1)
@@ -98,12 +95,6 @@ model Order {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
-  @@unique([userId, submissionKey])
-}
-
-model OrderCounter {
-  month String @id
-  value Int
 }
 
 model Sample {

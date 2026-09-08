@@ -62,7 +62,7 @@ export default async function AdminDashboardPage() {
                     <td><p className="font-mono text-xs font-bold text-slate-900">{order.orderNumber}</p><p className="mt-1 max-w-44 truncate text-xs text-slate-500">{order.orderName}</p></td>
                     <td className="font-semibold text-slate-900">{order.user.name}</td>
                     <td><p className="font-medium text-slate-700">{order.user.organization}</p><p className="mt-1 text-xs text-slate-400">{order.user.labName}</p></td>
-                    <td>Sanger{order.intakeVersion === 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
+                    <td>Sanger{order.intakeVersion >= 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
                     <td>{order.samples.length} / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)}</td>
                     <td>{formatDate(order.createdAt)}</td>
                     <td><StatusBadge status={order.status} /></td>

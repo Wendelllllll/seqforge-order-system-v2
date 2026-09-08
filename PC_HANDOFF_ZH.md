@@ -1,3 +1,4 @@
+> **V3 update:** PostgreSQL now replaces SQLite. Follow [README.md](README.md) for current setup, safe V2 data transfer, confirmed per-reaction prices and remaining launch work. The V2 instructions below are historical and must not be used to configure the V3 database.
 # SeqForge Order System V2：PC 接续开发交接说明
 
 ## 2026-09-07：客户下单功能更新

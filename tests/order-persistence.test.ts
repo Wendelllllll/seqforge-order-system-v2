@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { createOrder } from "../src/lib/create-order";
+import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import "dotenv/config";
+import { transferSqlite } from "../scripts/sqlite-transfer";
+import { createOrder, SubmissionConflict } from "../src/lib/create-order";
 import { blankOrder, blankReaction, orderSchema } from "../src/lib/order-intake";
 
 test("migration preserves legacy orders and new orders persist samples and reactions atomically", async () => {
@@ -13,7 +17,7 @@ test("migration preserves legacy orders and new orders persist samples and react
   const directory = mkdtempSync(prefix);
   const path = join(directory, "test.db");
   const sqlite = new DatabaseSync(path);
-  const migration = (name: string) => readFileSync(join(process.cwd(), "prisma/migrations", name, "migration.sql"), "utf8");
+  const migration = (name: string) => readFileSync(join(process.cwd(), "prisma/legacy-sqlite/migrations", name, "migration.sql"), "utf8");
   sqlite.exec(migration("20260904190152_init"));
   sqlite.exec(migration("20260904190347_add_account_issuer"));
   sqlite.exec(`
@@ -25,8 +29,15 @@ test("migration preserves legacy orders and new orders persist samples and react
   `);
   sqlite.exec(migration("20260908040000_customer_intake"));
   sqlite.close();
-  const db = new PrismaClient({ datasourceUrl: `file:${path.replaceAll("\\", "/")}` });
+  writeFileSync(join(directory, "old.txt"), "test");
+  const schema = "seqforge_test_" + randomUUID().replaceAll("-", "");
+  const url = new URL(process.env.DATABASE_URL!);
+  url.searchParams.set("schema", schema);
+  const db = new PrismaClient({ datasourceUrl: url.toString() });
+  execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], { env: { ...process.env, DATABASE_URL: url.toString() }, stdio: "pipe" });
   try {
+    await transferSqlite(db, path, directory);
+    await assert.rejects(transferSqlite(db, path, directory), /empty PostgreSQL/);
     const legacy = await db.order.findUniqueOrThrow({ where: { id: "old" }, include: { samples: { include: { reactions: true } }, result: true, statusHistory: true } });
     assert.equal(legacy.intakeVersion, 1);
     assert.equal(legacy.samples[0].notes, "Keep me");
@@ -42,19 +53,29 @@ test("migration preserves legacy orders and new orders persist samples and react
     draft.samples[0].reactions.push({ ...blankReaction(), primerSource: "SeqForge synthesized primer", primerName: "Custom-F", primerSequence: "acgtacgtn", purification: "HPLC", synthesisScale: "100 nmol", modification5: "Requested modification", specialProtocol: "GC-rich" });
     const created = await createOrder(db, "u1", orderSchema.parse(draft));
     const saved = await db.order.findUniqueOrThrow({ where: { id: created.id }, include: { samples: { include: { reactions: { orderBy: { position: "asc" } } } }, statusHistory: true } });
-    assert.equal(saved.intakeVersion, 2); assert.equal(saved.priority, draft.priority);
+    assert.equal(saved.intakeVersion, 3); assert.equal(saved.priority, draft.priority);
     assert.equal(saved.samples.length, 1); assert.equal(saved.samples[0].well, "A1");
     assert.equal(saved.samples[0].reactions.length, 2);
     assert.equal(saved.samples[0].reactions[0].storedPrimerReference, "DEMO-P123");
     assert.equal(saved.samples[0].reactions[1].primerSequence, "ACGTACGTN");
     assert.equal(saved.samples[0].reactions[1].modification5, "Requested modification");
     assert.equal(saved.statusHistory.length, 1);
+    assert.equal((saved.pricingSnapshot as { subtotalCents: number }).subtotalCents, 900);
+    assert.equal(legacy.pricingSnapshot, null);
+    const concurrent = await Promise.all(Array.from({ length: 30 }, () => createOrder(db, "u1", orderSchema.parse(draft))));
+    assert.equal(new Set(concurrent.map((o) => o.orderNumber)).size, 30);
+    const key = randomUUID();
+    const retried = await Promise.all(Array.from({ length: 8 }, () => createOrder(db, "u1", orderSchema.parse(draft), key)));
+    assert.equal(new Set(retried.map((o) => o.id)).size, 1);
+    await assert.rejects(createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "Changed" }), key), SubmissionConflict);
     const second = await createOrder(db, "u1", orderSchema.parse(draft));
     assert.notEqual(second.orderNumber, created.orderNumber);
     const count = await db.order.count();
     await assert.rejects(createOrder(db, "missing-user", orderSchema.parse(draft)));
     assert.equal(await db.order.count(), count);
   } finally {
+    assert.match(schema, /^seqforge_test_[a-f0-9]{32}$/);
+    await db.$executeRawUnsafe(`DROP SCHEMA "${schema}" CASCADE`);
     await db.$disconnect();
     assert.ok(resolve(directory).startsWith(resolve(prefix)));
     rmSync(directory, { recursive: true, force: true });

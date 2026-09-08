@@ -1,6 +1,6 @@
 {
   "name": "seqforge-order-system-v2",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "setup": "node scripts/setup.mjs",
@@ -13,7 +13,10 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test tests/order-intake.test.ts tests/pricing.test.ts",
+    "test:db": "tsx --test tests/order-persistence.test.ts",
+    "db:import-sqlite": "tsx scripts/import-sqlite.ts",
+    "db:deploy": "prisma migrate deploy",
     "test:smoke": "tsx scripts/smoke-ordering.ts",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build"
   },

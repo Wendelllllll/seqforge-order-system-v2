@@ -1,3 +1,11 @@
+## V3 verified on this PC
+
+PostgreSQL 18.6 is running locally on port 55432. The read-only SQLite transfer preserved 4 users/accounts, 3 existing orders, 3 samples, 6 reactions, 2 result records and 7 status records; files remain in local storage. Subsequent smoke runs added clearly named synthetic data.
+
+Verification passed: ESLint, TypeScript, 18 unit tests, production build, isolated PostgreSQL migration/persistence test with 30 concurrent orders and eight duplicate retries, and HTTP customer/admin/result/ownership tests. HTTP tests also verified that forged pricing is ignored and changed payloads with reused submission keys return 409. Browser verification confirmed the live plate pre-mixed rate of $3.50.
+
+No public deployment has been performed. Follow the V3 README for migration and launch requirements.
+> **V3 update:** PostgreSQL now replaces SQLite. Follow [README.md](README.md) for current setup, safe V2 data transfer, confirmed per-reaction prices and remaining launch work. The V2 instructions below are historical and must not be used to configure the V3 database.
 # SeqForge Order System V2 — Progress
 
 Updated: September 7, 2026

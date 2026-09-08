@@ -1,94 +1,65 @@
-# SeqForge Order System V2
+# SeqForge Order System V3
 
-A local functional prototype for the SeqForge Sanger sequencing order workflow.
+SeqForge's Sanger sequencing customer portal and laboratory order workflow, built with Next.js 16, React 19, TypeScript, Better Auth, Prisma 6 and PostgreSQL. V3 runs locally against PostgreSQL; public production deployment is still pending.
 
-SeqForge 新版订单系统的本地功能 Demo，包含客户下单、实验室订单处理和结果交付。当前可以在本地完整演示，尚未部署为生产服务。
+Repository: [Wendelllllll/seqforge-order-system-v2](https://github.com/Wendelllllll/seqforge-order-system-v2). The repository name is retained for continuity.
 
-Repository: [Wendelllllll/seqforge-order-system-v2](https://github.com/Wendelllllll/seqforge-order-system-v2) (private).
+## V3 pricing
 
-## Project documents / 项目资料
+USD per sequencing reaction, including partially filled plates:
 
-- [PC 接续开发说明（中文）](PC_HANDOFF_ZH.md): Windows installation, next tasks, and switching between computers.
-- [Current progress / 当前进度](PROJECT_PROGRESS.md): completed work, verification, and remaining milestones.
-- [技术与销售讲解手册（中文）](SEQFORGE_DEMO_TECHNICAL_AND_SALES_GUIDE_ZH.md): architecture, database, product explanation, and demo script.
-- [Original project brief / 原始需求](PROJECT_BRIEF.md): original scope and future direction; not a list of completed features.
+| Container | Standard | Pre-mixed | Ready to load |
+| --- | ---: | ---: | ---: |
+| Plate | $4.50 | $3.50 | $2.50 |
+| Tubes | $5.50 | $4.50 | $3.50 |
 
-## Expanded customer ordering
+A full pre-mixed 96-well plate costs $336 for sequencing. Multiple primers on a sample count as separate reactions. Calculations use integer cents. The server calculates and saves a versioned price snapshot with each new order; client-supplied totals are not trusted. Older orders retain their original data without retroactive prices.
 
-See [Customer intake workflow](CUSTOMER_INTAKE.md) for the new service/container choices, physical sample → reaction mapping, primer catalogue and synthesis requests, spreadsheet import, review step, and printable manifest.
+Shown amounts are sequencing subtotals, excluding shipping and taxes. Synthesis, preparation, special protocols, rush handling and additional instructions require review for extra charges. No payment is collected. Customer-specific prices and coupons are not implemented.
 
-After updating an existing checkout, run npm ci and npm run setup to apply the additive migration. Existing orders and result links are preserved. Use Node.js 22.13 or later (22.23.2 verified on Windows).
+## Setup
 
-## Stack
+Use Node.js 22.13 or later (22.23.2 verified), and a running PostgreSQL server (18.6 verified). Install dependencies with `npm ci`. Run `npm run setup` once to create `.env` if absent; it will stop until you configure a PostgreSQL `DATABASE_URL`. Keep the generated authentication secret, and set `BETTER_AUTH_URL` to the application's origin.
 
-Next.js 16.3.4 (App Router), React 19.2.8, TypeScript, Tailwind CSS 4, Better Auth, Prisma 6, and SQLite. Pages and API routes run in one Node.js application; no separate database server is needed for this demo. The lockfile records exact dependency versions.
-
-## Implemented workflow
-
-1. A customer registers or signs in.
-2. The customer creates a Sanger order with one or more samples and primers.
-3. The order is persisted in SQLite and appears in customer order history.
-4. An administrator opens the order and changes its laboratory status.
-5. The updated status appears in the customer portal.
-6. The administrator uploads a result file.
-7. The customer downloads the result from the completed order.
-
-## Local setup
-
-Install Git and Node.js 22. The repository includes an `.nvmrc` file. On a new computer, clone this private repository using your GitHub account:
+After configuring the database:
 
 ```bash
-git clone https://github.com/Wendelllllll/seqforge-order-system-v2.git
-cd seqforge-order-system-v2
-npm ci
 npm run setup
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [localhost:3000](http://localhost:3000). On PowerShell use `npm.cmd` if script execution policy blocks `npm`.
 
-These commands work in Windows PowerShell, macOS, and Linux shells. If PowerShell blocks `npm.ps1`, use `npm.cmd` in place of `npm`, or run the commands in Command Prompt.
+Optional local demo accounts: `npm run setup -- --seed-demo`. This is restricted to a local database and localhost application. Customer: `scientist@demo.local` / `DemoCustomer!2026`; administrator: `admin@seqforge.local` / `SeqForgeDemo!2026`. Set `SHOW_DEMO_ACCOUNTS="true"` only to display these on the local login page. Setup does not seed accounts by default.
 
-`npm run setup` creates `.env` with a random local authentication secret if missing, creates the SQLite database if missing, generates Prisma Client, applies committed migrations, and seeds the two demo accounts. Existing configuration is preserved. It is a local-demo command and requires `DATABASE_URL="file:./dev.db"` and `BETTER_AUTH_URL="http://localhost:3000"`.
+## Upgrade from V2 SQLite
 
-First installation requires network access for dependencies. Keep port 3000 available because authentication currently trusts this exact localhost origin. Windows setup and the customer ordering workflow have now been verified; see PROJECT_PROGRESS.md.
-
-## Demo accounts
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Customer | `scientist@demo.local` | `DemoCustomer!2026` |
-| Administrator | `admin@seqforge.local` | `SeqForgeDemo!2026` |
-
-These credentials are for local demo use only.
-
-## Useful commands
+**Stop the application first. Back up `.env`, `prisma/dev.db` and the entire `storage/results/` directory.** Keep the old `BETTER_AUTH_SECRET` to preserve authentication continuity. Change only the database connection to a new, empty PostgreSQL database. Do not seed it before importing.
 
 ```bash
-npm run dev          # Start the local application
-npm run setup        # Prepare a new computer or apply committed migrations
-npm run db:seed      # Create required demo accounts
-npm run db:studio    # Inspect local data through Prisma Studio
-npm run verify       # Lint, route types, typecheck, tests, and build
-npm run test:smoke   # Test the running local demo with synthetic data
+npm ci
+npm run setup -- --import-sqlite prisma/dev.db
+npm run dev
 ```
 
-## Local data
+The source must have V2's customer-intake migration applied. Original SQLite schema and migrations are archived under `prisma/legacy-sqlite/`; these are not PostgreSQL migrations. The importer reads SQLite without modifying it, verifies referenced result files exist, copies accounts, sessions, orders, samples, reactions, result metadata and status history in one PostgreSQL transaction, and verifies table counts. It refuses a nonempty target. Existing order numbers initialize the monthly counter. Keep backups after validating migrated login, orders and downloads.
 
-- SQLite database: `prisma/dev.db`
-- Uploaded result files: `storage/results/`
-- Both locations are excluded from Git.
+Result binaries remain in `storage/results/`; PostgreSQL stores their metadata. Moving computers requires transferring these files securely as well as the database. GitHub contains code and migrations, not passwords, databases or customer results.
 
-The repository includes `demo-result.txt`, a synthetic file that can be used to demonstrate administrator result upload.
+## Reliability and verification
 
-GitHub synchronizes code, documentation, database migrations, and the account seed script. It does not synchronize `.env`, existing customers/orders/sessions, uploaded results, `node_modules`, or build caches. Each computer starts with its own demo database. Do not copy Mac dependencies to Windows; install with `npm ci` on each machine.
+Order numbers use a transactional monthly database counter. Submissions require an `Idempotency-Key` UUID: retries with the same customer, key and parsed payload return the same order; a changed payload with the same key returns HTTP 409. This protects network retries while the form remains open. Reloading the form creates a new submission identity.
 
-## Continue development on another computer
+```bash
+npm run verify       # lint, types, unit tests, production build
+npm run test:db      # real PostgreSQL integration; creates and removes an isolated test schema
+npm run test:smoke   # running localhost app; creates synthetic accounts, orders and result files
+```
 
-Before switching computers, commit and push your work. On the other computer, run `git status` and `git pull --ff-only` on the same branch. If dependencies or migrations changed, stop the app and run `npm ci` followed by `npm run setup`. See the [PC handoff guide](PC_HANDOFF_ZH.md) for detailed commands and troubleshooting.
+The database test uses `DATABASE_URL` and requires permission to create a schema. It verifies migration preservation, transaction rollback, 30 concurrent distinct submissions, and eight concurrent retries. This is a correctness check, not a measured production capacity guarantee.
 
-Next priorities: validate the service catalogue and acceptance rules with the lab, prepare an isolated hosted demo, and improve submission idempotency and result-file consistency. Keep `PROJECT_PROGRESS.md` updated with actual results.
+## Launch work still required
 
-## Prototype boundaries
+Provide HTTPS hosting, managed PostgreSQL or an operated database server with restore-tested backups, durable private result storage, production account provisioning and recovery, monitoring and upload controls. Validate laboratory acceptance rules and all additional fees. Current result delivery supports one downloadable file/archive per order; a staff upload updates status and becomes available when the customer refreshes. Email notifications, automated instrument integration, customer-specific pricing and payments remain future work.
 
-The prototype does not include production deployment, payments, customer-specific pricing, email notifications, reCAPTCHA, production legacy-data migration, non-Sanger service types, or ABI/LIMS integration. Do not use real customer data in the local demo.
+See [customer intake](CUSTOMER_INTAKE.md) for detailed sample and primer fields. The older handoff and technical guides describe V2; this README supersedes their SQLite/setup/pricing instructions.
