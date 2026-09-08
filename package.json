@@ -13,7 +13,9 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "verify": "npm run lint && npm run typecheck && npm run build"
+    "test": "tsx --test tests/*.test.ts",
+    "test:smoke": "tsx scripts/smoke-ordering.ts",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.7.2",
@@ -27,7 +29,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

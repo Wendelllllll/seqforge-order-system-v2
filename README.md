@@ -13,6 +13,12 @@ Repository: [Wendelllllll/seqforge-order-system-v2](https://github.com/Wendellll
 - [技术与销售讲解手册（中文）](SEQFORGE_DEMO_TECHNICAL_AND_SALES_GUIDE_ZH.md): architecture, database, product explanation, and demo script.
 - [Original project brief / 原始需求](PROJECT_BRIEF.md): original scope and future direction; not a list of completed features.
 
+## Expanded customer ordering
+
+See [Customer intake workflow](CUSTOMER_INTAKE.md) for the new service/container choices, physical sample → reaction mapping, primer catalogue and synthesis requests, spreadsheet import, review step, and printable manifest.
+
+After updating an existing checkout, run npm ci and npm run setup to apply the additive migration. Existing orders and result links are preserved. Use Node.js 22.13 or later (22.23.2 verified on Windows).
+
 ## Stack
 
 Next.js 16.3.4 (App Router), React 19.2.8, TypeScript, Tailwind CSS 4, Better Auth, Prisma 6, and SQLite. Pages and API routes run in one Node.js application; no separate database server is needed for this demo. The lockfile records exact dependency versions.
@@ -45,7 +51,7 @@ These commands work in Windows PowerShell, macOS, and Linux shells. If PowerShel
 
 `npm run setup` creates `.env` with a random local authentication secret if missing, creates the SQLite database if missing, generates Prisma Client, applies committed migrations, and seeds the two demo accounts. Existing configuration is preserved. It is a local-demo command and requires `DATABASE_URL="file:./dev.db"` and `BETTER_AUTH_URL="http://localhost:3000"`.
 
-First installation requires network access for dependencies. Keep port 3000 available because authentication currently trusts this exact localhost origin. Windows execution still needs verification on the target PC.
+First installation requires network access for dependencies. Keep port 3000 available because authentication currently trusts this exact localhost origin. Windows setup and the customer ordering workflow have now been verified; see PROJECT_PROGRESS.md.
 
 ## Demo accounts
 
@@ -63,7 +69,8 @@ npm run dev          # Start the local application
 npm run setup        # Prepare a new computer or apply committed migrations
 npm run db:seed      # Create required demo accounts
 npm run db:studio    # Inspect local data through Prisma Studio
-npm run verify       # Run lint, generate route types, typecheck, and build
+npm run verify       # Lint, route types, typecheck, tests, and build
+npm run test:smoke   # Test the running local demo with synthetic data
 ```
 
 ## Local data
@@ -80,8 +87,8 @@ GitHub synchronizes code, documentation, database migrations, and the account se
 
 Before switching computers, commit and push your work. On the other computer, run `git status` and `git pull --ff-only` on the same branch. If dependencies or migrations changed, stop the app and run `npm ci` followed by `npm run setup`. See the [PC handoff guide](PC_HANDOFF_ZH.md) for detailed commands and troubleshooting.
 
-Next priorities: verify the workflow on PC; improve high-volume sample entry; add automated permission/workflow tests; refine error handling; improve order-number concurrency and result-file consistency. Keep `PROJECT_PROGRESS.md` updated with actual results.
+Next priorities: validate the service catalogue and acceptance rules with the lab, prepare an isolated hosted demo, and improve submission idempotency and result-file consistency. Keep `PROJECT_PROGRESS.md` updated with actual results.
 
 ## Prototype boundaries
 
-The prototype does not include production deployment, payments, customer-specific pricing, email notifications, reCAPTCHA, legacy-data migration, plate import, other service types, or ABI/LIMS integration. Do not use real customer data in the local demo.
+The prototype does not include production deployment, payments, customer-specific pricing, email notifications, reCAPTCHA, production legacy-data migration, non-Sanger service types, or ABI/LIMS integration. Do not use real customer data in the local demo.

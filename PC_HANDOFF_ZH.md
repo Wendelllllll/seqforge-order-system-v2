@@ -1,5 +1,13 @@
 # SeqForge Order System V2：PC 接续开发交接说明
 
+## 2026-09-07：客户下单功能更新
+
+新增服务优先级、Tube/Plate、Standard/Pre-mixed/Ready to load、实体样本与多个测序反应的独立记录、通用/自带/存储/合成引物信息、CSV/TSV/粘贴导入、提交前复核和可打印样本清单。完整说明见 [CUSTOMER_INTAKE.md](CUSTOMER_INTAKE.md)。
+
+拉取后运行 npm ci、npm run setup、npm run verify，再运行 npm run dev。数据库升级为增量迁移，保留旧订单及结果关联；每台电脑的数据仍然独立。建议 Node.js 22.23.2，自动化测试最低需要 22.13。
+
+本轮仍为本地 Demo。分享给客户前需部署独立测试站点，并由实验室确认服务、引物、浓度、板孔和交付规则。旧文档中关于「每条 Sample 就是一个反应」或「尚无板导入」的描述以本次更新为准。
+
 更新时间：2026 年 9 月 7 日。
 
 这份文档帮助你从 GitHub 下载完整的项目源码，在 Windows PC 上启动本地 Demo，并从当前进度继续开发。项目已经完成 Sanger 订单的核心流程：客户注册／登录、提交多样本订单、管理员处理订单并上传结果、客户查看状态并下载结果。

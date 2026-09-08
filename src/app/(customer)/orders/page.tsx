@@ -10,7 +10,7 @@ export default async function OrdersPage() {
   const session = await requireCustomer();
   const orders = await prisma.order.findMany({
     where: { userId: session.user.id },
-    include: { _count: { select: { samples: true } }, result: { select: { id: true } } },
+    include: { samples: { select: { _count: { select: { reactions: true } } } }, result: { select: { id: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -29,15 +29,15 @@ export default async function OrdersPage() {
         {orders.length ? (
           <div className="overflow-x-auto">
             <table className="data-table min-w-[820px]">
-              <thead><tr><th>Order number</th><th>Name</th><th>Service</th><th>Date</th><th>Samples</th><th>Status</th><th>Result</th><th><span className="sr-only">Open</span></th></tr></thead>
+              <thead><tr><th>Order number</th><th>Name</th><th>Service</th><th>Date</th><th>Samples / reactions</th><th>Status</th><th>Result</th><th><span className="sr-only">Open</span></th></tr></thead>
               <tbody>
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50/70">
                     <td className="font-mono text-xs font-bold text-slate-900">{order.orderNumber}</td>
                     <td className="font-semibold text-slate-900">{order.orderName}</td>
-                    <td>Sanger</td>
+                    <td>Sanger{order.intakeVersion === 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
                     <td>{formatDate(order.createdAt)}</td>
-                    <td>{order._count.samples}</td>
+                    <td>{order.samples.length} / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)}</td>
                     <td><StatusBadge status={order.status} /></td>
                     <td>{order.result ? <span className="font-semibold text-emerald-700">Available</span> : <span className="text-slate-400">—</span>}</td>
                     <td><Link href={`/orders/${order.id}`} className="font-bold text-cyan-700 hover:text-cyan-900">View</Link></td>

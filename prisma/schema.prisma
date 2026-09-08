@@ -77,6 +77,10 @@ model Order {
   orderNumber         String          @unique
   userId              String
   service             String          @default("SANGER")
+  intakeVersion       Int             @default(1)
+  priority            String          @default("Standard")
+  container           String          @default("Tubes")
+  submissionMode      String          @default("Standard")
   orderName           String
   poNumber            String?
   specialInstructions String?
@@ -98,15 +102,42 @@ model Sample {
   orderId       String
   position      Int
   sampleName    String
+  sampleKey     String  @default("")
+  tubeLabel     String  @default("")
+  plateLabel    String  @default("")
+  well          String  @default("")
+  templateLength String @default("")
+  preparation   String  @default("None requested")
   templateType  String
   concentration String?
   primerName    String
   primerSource  String
   notes         String?
   order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reactions     Reaction[]
 
   @@unique([orderId, position])
   @@index([orderId])
+}
+
+model Reaction {
+  id                    String @id @default(cuid())
+  sampleId              String
+  position              Int
+  primerName            String
+  primerSource          String
+  primerConcentration   String @default("")
+  storedPrimerReference String @default("")
+  primerSequence        String @default("")
+  purification          String @default("Desalted")
+  synthesisScale        String @default("25 nmol")
+  modification5         String @default("")
+  modification3         String @default("")
+  modificationInternal  String @default("")
+  specialProtocol       String @default("None known")
+  sample                Sample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@unique([sampleId, position])
 }
 
 model Result {

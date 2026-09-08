@@ -1,76 +1,24 @@
-import { z } from "zod";
-
 import { auth } from "@/lib/auth";
+import { createOrder } from "@/lib/create-order";
+import { issueLabel, orderSchema } from "@/lib/order-intake";
 import { prisma } from "@/lib/prisma";
-
-const sampleSchema = z.object({
-  sampleName: z.string().trim().min(1, "Every sample needs a name.").max(100),
-  templateType: z.string().trim().min(1).max(100),
-  concentration: z.string().trim().max(60),
-  primerName: z.string().trim().min(1, "Every sample needs a primer.").max(100),
-  primerSource: z.string().trim().min(1).max(100),
-  notes: z.string().trim().max(500),
-});
-
-const orderSchema = z.object({
-  orderName: z.string().trim().min(1, "Order name is required.").max(120),
-  poNumber: z.string().trim().max(80),
-  specialInstructions: z.string().trim().max(2000),
-  samples: z.array(sampleSchema).min(1, "Add at least one sample.").max(200),
-});
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
-
-  if (!session || session.user.role === "admin") {
-    return Response.json({ error: "You must be signed in as a customer." }, { status: 401 });
+  if (!session || session.user.role === "admin") return Response.json({ error: "You must be signed in as a customer." }, { status: 401 });
+  if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
+  let body: unknown;
+  try {
+    const text = await request.text();
+    if (new TextEncoder().encode(text).length > 2_000_000) return Response.json({ error: "Order data is too large." }, { status: 413 });
+    body = JSON.parse(text);
+  } catch { return Response.json({ error: "Send a valid JSON order." }, { status: 400 }); }
+  const parsed = orderSchema.safeParse(body);
+  if (!parsed.success) return Response.json({ error: "Check the order details.", issues: parsed.error.issues.map(issueLabel) }, { status: 400 });
+  try {
+    return Response.json(await createOrder(prisma, session.user.id, parsed.data), { status: 201 });
+  } catch (error) {
+    console.error("Order creation failed", error instanceof Error ? error.name : "Unknown error");
+    return Response.json({ error: "Unable to save the order. Your entries are still available; please try again." }, { status: 503 });
   }
-
-  const parsed = orderSchema.safeParse(await request.json());
-
-  if (!parsed.success) {
-    return Response.json(
-      { error: parsed.error.issues[0]?.message || "Check the order details and try again." },
-      { status: 400 },
-    );
-  }
-
-  const now = new Date();
-  const prefix = `SF-${String(now.getUTCFullYear()).slice(-2)}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const latest = await prisma.order.findFirst({
-    where: { orderNumber: { startsWith: prefix } },
-    orderBy: { orderNumber: "desc" },
-    select: { orderNumber: true },
-  });
-  const nextSequence = latest ? Number(latest.orderNumber.slice(-4)) + 1 : 1;
-  const orderNumber = `${prefix}${String(nextSequence).padStart(4, "0")}`;
-  const data = parsed.data;
-
-  const order = await prisma.order.create({
-    data: {
-      orderNumber,
-      userId: session.user.id,
-      orderName: data.orderName,
-      poNumber: data.poNumber || null,
-      specialInstructions: data.specialInstructions || null,
-      status: "SUBMITTED",
-      samples: {
-        create: data.samples.map((sample, index) => ({
-          position: index + 1,
-          sampleName: sample.sampleName,
-          templateType: sample.templateType,
-          concentration: sample.concentration || null,
-          primerName: sample.primerName,
-          primerSource: sample.primerSource,
-          notes: sample.notes || null,
-        })),
-      },
-      statusHistory: {
-        create: { status: "SUBMITTED" },
-      },
-    },
-    select: { id: true, orderNumber: true },
-  });
-
-  return Response.json(order, { status: 201 });
 }

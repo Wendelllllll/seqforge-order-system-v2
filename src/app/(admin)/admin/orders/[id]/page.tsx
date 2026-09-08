@@ -1,3 +1,4 @@
+import { OrderManifest } from "@/components/order-manifest";
 import { ArrowLeft, Download, FileText, Mail, Phone, University, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,14 +7,16 @@ import { ResultUpload, StatusControl } from "@/components/admin-order-actions";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/session";
 
 export default async function AdminOrderPage({ params }: PageProps<"/admin/orders/[id]">) {
+  await requireAdmin();
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
     include: {
       user: true,
-      samples: { orderBy: { position: "asc" } },
+      samples: { orderBy: { position: "asc" }, include: { reactions: { orderBy: { position: "asc" } } } },
       result: true,
       statusHistory: { orderBy: { createdAt: "desc" } },
     },
@@ -29,22 +32,12 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">{order.orderName}</h1>
           <p className="mt-2 font-mono text-sm font-bold text-slate-500">{order.orderNumber}</p>
         </div>
-        <p className="text-sm text-slate-500">Submitted {formatDateTime(order.createdAt)}</p>
+        <div className="space-y-3"><p className="text-sm text-slate-500">Submitted {formatDateTime(order.createdAt)}</p><Link href={`/manifest/${order.id}`} className="button-secondary">View / print submission manifest</Link></div>
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_340px]">
-        <div className="space-y-6">
-          <section className="panel">
-            <div className="panel-heading"><div><h2 className="text-lg font-bold text-slate-950">Samples and primers</h2><p className="mt-1 text-sm text-slate-500">Review the submitted sequencing reactions.</p></div><span className="metric-pill">{order.samples.length} reactions</span></div>
-            <div className="overflow-x-auto">
-              <table className="data-table min-w-[900px]">
-                <thead><tr><th>#</th><th>Sample</th><th>Template</th><th>Concentration</th><th>Primer</th><th>Source</th><th>Notes</th></tr></thead>
-                <tbody>{order.samples.map((sample) => <tr key={sample.id}><td>{sample.position}</td><td className="font-semibold text-slate-900">{sample.sampleName}</td><td>{sample.templateType}</td><td>{sample.concentration || "—"}</td><td className="font-semibold">{sample.primerName}</td><td>{sample.primerSource}</td><td>{sample.notes || "—"}</td></tr>)}</tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="panel p-5 sm:p-6"><h2 className="text-lg font-bold text-slate-950">Special instructions</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{order.specialInstructions || "No special instructions were provided."}</p></section>
+        <div className="min-w-0 space-y-6">
+          <OrderManifest order={order} />
 
           <section className="panel p-5 sm:p-6">
             <h2 className="text-lg font-bold text-slate-950">Customer information</h2>

@@ -1,9 +1,10 @@
+import { OrderManifest } from "@/components/order-manifest";
 import { CheckCircle2, Download, FileText, FlaskConical } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StatusBadge } from "@/components/status-badge";
-import { PrintButton } from "@/components/print-button";
+
 import { formatDate, formatDateTime, ORDER_STATUSES, STATUS_LABELS } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import { requireCustomer } from "@/lib/session";
@@ -15,7 +16,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
   const order = await prisma.order.findFirst({
     where: { id, userId: session.user.id },
     include: {
-      samples: { orderBy: { position: "asc" } },
+      samples: { orderBy: { position: "asc" }, include: { reactions: { orderBy: { position: "asc" } } } },
       result: true,
       statusHistory: { orderBy: { createdAt: "asc" } },
     },
@@ -29,7 +30,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
       {query.submitted === "1" ? (
         <div className="mb-6 flex gap-3 border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">SeqForge has received {order.samples.length} {order.samples.length === 1 ? "sample" : "samples"} under order {order.orderNumber}.</p></div>
+          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your demo request for {order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions is saved under {order.orderNumber}.</p></div>
         </div>
       ) : null}
 
@@ -39,7 +40,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">{order.orderName}</h1>
           <p className="mt-2 font-mono text-sm font-bold text-slate-500">{order.orderNumber}</p>
         </div>
-        <PrintButton />
+        <Link href={`/manifest/${order.id}`} className="button-secondary">View / print submission manifest</Link>
       </div>
 
       <section className="panel mt-8 p-5 sm:p-6">
@@ -57,21 +58,8 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
       </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
-          <section className="panel">
-            <div className="panel-heading"><h2 className="text-lg font-bold text-slate-950">Samples and primers</h2><span className="metric-pill">{order.samples.length} reactions</span></div>
-            <div className="overflow-x-auto">
-              <table className="data-table min-w-[800px]">
-                <thead><tr><th>#</th><th>Sample</th><th>Template</th><th>Concentration</th><th>Primer</th><th>Source</th><th>Notes</th></tr></thead>
-                <tbody>{order.samples.map((sample) => <tr key={sample.id}><td>{sample.position}</td><td className="font-semibold text-slate-900">{sample.sampleName}</td><td>{sample.templateType}</td><td>{sample.concentration || "—"}</td><td className="font-semibold">{sample.primerName}</td><td>{sample.primerSource}</td><td>{sample.notes || "—"}</td></tr>)}</tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="panel p-5 sm:p-6">
-            <h2 className="text-lg font-bold text-slate-950">Instructions</h2>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{order.specialInstructions || "No special instructions were provided."}</p>
-          </section>
+        <div className="min-w-0 space-y-6">
+          <OrderManifest order={order} />
         </div>
 
         <aside className="space-y-6">

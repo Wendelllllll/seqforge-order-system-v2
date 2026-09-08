@@ -4,13 +4,15 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDate } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/session";
 
 export default async function AdminDashboardPage() {
+  await requireAdmin();
   const [orders, totalOrders, newOrders, activeOrders, completedOrders, customerCount] = await Promise.all([
     prisma.order.findMany({
       include: {
         user: { select: { name: true, organization: true, labName: true } },
-        _count: { select: { samples: true } },
+        samples: { select: { _count: { select: { reactions: true } } } },
         result: { select: { id: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -53,15 +55,15 @@ export default async function AdminDashboardPage() {
         {orders.length ? (
           <div className="overflow-x-auto">
             <table className="data-table min-w-[1050px]">
-              <thead><tr><th>Order</th><th>Customer</th><th>Organization / lab</th><th>Service</th><th>Samples</th><th>Submitted</th><th>Status</th><th>Result</th><th><span className="sr-only">Open</span></th></tr></thead>
+              <thead><tr><th>Order</th><th>Customer</th><th>Organization / lab</th><th>Service</th><th>Samples / reactions</th><th>Submitted</th><th>Status</th><th>Result</th><th><span className="sr-only">Open</span></th></tr></thead>
               <tbody>
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50/70">
                     <td><p className="font-mono text-xs font-bold text-slate-900">{order.orderNumber}</p><p className="mt-1 max-w-44 truncate text-xs text-slate-500">{order.orderName}</p></td>
                     <td className="font-semibold text-slate-900">{order.user.name}</td>
                     <td><p className="font-medium text-slate-700">{order.user.organization}</p><p className="mt-1 text-xs text-slate-400">{order.user.labName}</p></td>
-                    <td>Sanger</td>
-                    <td>{order._count.samples}</td>
+                    <td>Sanger{order.intakeVersion === 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
+                    <td>{order.samples.length} / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)}</td>
                     <td>{formatDate(order.createdAt)}</td>
                     <td><StatusBadge status={order.status} /></td>
                     <td>{order.result ? <span className="font-semibold text-emerald-700">Uploaded</span> : <span className="text-slate-400">Pending</span>}</td>

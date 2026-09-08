@@ -37,6 +37,19 @@ select:not(:disabled) {
   background: #a5f3fc;
 }
 
+@media print {
+  @page { size: landscape; margin: 12mm; }
+  html, body { background: white; font-size: 10pt; }
+  .print-hide { display: none !important; }
+  .submission-manifest { box-shadow: none; }
+  .submission-manifest .overflow-x-auto { overflow: visible; }
+  .submission-manifest table { min-width: 0; table-layout: fixed; }
+  .submission-manifest td, .submission-manifest th { overflow-wrap: anywhere; padding: 8px; }
+  .submission-manifest tr { break-inside: avoid; }
+  .submission-manifest thead { display: table-header-group; }
+  main { max-width: none !important; padding: 0 !important; }
+}
+
 @layer components {
   .button-primary {
     @apply inline-flex min-h-10 items-center gap-2 bg-cyan-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50;

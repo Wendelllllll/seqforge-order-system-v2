@@ -4,7 +4,7 @@ Updated: September 7, 2026
 
 ## Current milestone
 
-Functional local vertical slice.
+Expanded Sanger customer intake with service choices, physical sample/reaction mapping, spreadsheet import and submission manifests. See CUSTOMER_INTAKE.md.
 
 ## Completed
 
@@ -35,8 +35,8 @@ Functional local vertical slice.
 
 ## Later prototype polish
 
-- [ ] Improve high-volume sample entry
-- [ ] Add targeted automated workflow tests
+- [x] Add validated spreadsheet paste/import and common template/preparation fill
+- [x] Add validation/import/migration tests and an HTTP permission/workflow smoke script
 - [ ] Refine validation and empty/error states from browser testing
 
 ## PC handoff preparation — September 7
@@ -51,17 +51,38 @@ Functional local vertical slice.
 - [x] Fresh-database setup and repeat setup with Node.js 22.23.2
 - [x] Seeded customer/admin login and role checks on the fresh database
 - [x] Lint, generated route types, TypeScript checks, and production build on the clean copy with Node.js 22.23.2
-- [ ] Verify installation and the browser workflow on the actual Windows PC
+- [x] Verify installation and the browser workflow on the actual Windows PC
 
 GitHub stores the source and reproducible setup, not this Mac's live database or uploaded files. A new PC environment initially contains demo accounts and no orders.
 
 ## Suggested next development milestones
 
-1. Run the documented customer → admin → customer workflow on PC.
-2. Improve bulk sample entry and input validation based on actual lab usage.
-3. Add focused automated coverage for authentication, ownership, order creation, and result delivery.
+1. Confirm the service catalogue, plate controls and acceptance rules with the lab.
+2. Validate representative customer spreadsheets and a multi-page printed manifest.
+3. Prepare a separate hosted trial with individual accounts and persistent storage.
 4. Harden order-number allocation under concurrent submissions and document allowed status transitions.
 5. Improve result replacement, failed-upload cleanup, and operation history.
 6. Plan production infrastructure, organization/lab membership, account recovery, and notifications when the scope is confirmed.
 
-Payments, pricing, additional service types, plate import, legacy migration, and ABI/LIMS integration remain future scope. SQLite-to-PostgreSQL migration and production deployment have not been implemented.
+Payments, pricing, non-Sanger service types, production legacy migration, and ABI/LIMS integration remain future scope. SQLite-to-PostgreSQL migration and production deployment have not been implemented.
+
+
+## Expanded customer intake — Windows verification, September 7
+
+- [x] Service priority, container and submission-mode requests
+- [x] Physical Sample → Reaction records, including multiple primers per sample
+- [x] Tube/plate locations, preparation and special protocols
+- [x] Universal, supplied, stored-reference and synthesis primer details
+- [x] CSV/TSV/TXT and pasted spreadsheet import with preview and row errors
+- [x] Shared browser/server validation, review/edit step and printable owner/admin manifest
+- [x] Additive migration preserving legacy sample, primer, status and result data
+- [x] Customer history/admin queue show physical-sample and reaction counts
+- [x] Windows / Node.js 22.23.2: npm ci, setup, lint, route types, TypeScript and production build
+- [x] 11 automated tests for validation/import/migration/persistence
+- [x] HTTP smoke workflow: registration/login, malformed/invalid requests, order creation, ownership isolation, admin status/upload and authorized result download
+- [x] Browser walkthrough: incorrect TSV row reports a tube-label conflict; corrected import creates one sample with two reactions; back-to-edit retains entries; submission and saved manifest work
+- [x] Narrow browser viewport: corrected page overflow; order document fits the 639px viewport
+
+Validation ran against the local demo only. Synthetic smoke-test accounts/orders/results remain in this PC's ignored local database/storage. Print styling is implemented; a physical printout and large multi-page manifests still need user/lab acceptance testing.
+
+Next: confirm lab acceptance rules and representative bulk files, then deploy a separate customer trial environment. Additional production work includes submission idempotency, concurrent-load testing, password recovery, notifications, pricing/shipping, result replacement cleanup and audit history.
