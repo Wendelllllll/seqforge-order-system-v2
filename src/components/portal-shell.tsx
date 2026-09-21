@@ -6,7 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
-  Settings,
+  ArrowUpRight,
   UserRound,
   UsersRound,
 } from "lucide-react";
@@ -36,7 +36,6 @@ const adminNavigation = [
   { href: "/admin#orders", label: "Orders", icon: ClipboardList },
   { href: "/admin#customers", label: "Customers", icon: UsersRound },
   { href: "/admin#results", label: "Results", icon: FlaskConical },
-  { href: "/admin#settings", label: "Settings", icon: Settings },
 ];
 
 export function PortalShell({
@@ -59,8 +58,8 @@ export function PortalShell({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-slate-950 lg:flex">
+    <div className="portal-shell min-h-screen">
+      <aside className="portal-sidebar fixed inset-y-0 left-0 z-30 hidden w-64 flex-col lg:flex">
         <div className="border-b border-white/10 px-6 py-6">
           <Brand inverse />
         </div>
@@ -71,11 +70,7 @@ export function PortalShell({
         </div>
         <nav className="flex-1 space-y-1 px-3" aria-label="Primary navigation">
           {navigation.map((item) => {
-            const active = item.href === "/dashboard"
-              ? pathname === item.href
-              : item.href === "/admin"
-                ? pathname.startsWith("/admin")
-                : pathname.startsWith(item.href.split("#")[0]);
+            const active = !item.href.includes("#") && (item.href === "/orders" ? pathname === "/orders" || (pathname.startsWith("/orders/") && pathname !== "/orders/new") : pathname === item.href || (item.href === "/admin" && pathname.startsWith("/admin/")));
             const Icon = item.icon;
 
             return (
@@ -84,7 +79,7 @@ export function PortalShell({
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors ${
                   active
-                    ? "bg-cyan-500/15 text-cyan-200"
+                    ? "portal-nav-active"
                     : "text-slate-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
@@ -134,6 +129,7 @@ export function PortalShell({
             })}
           </nav>
         </header>
+        <div className="portal-topbar"><span>SeqForge / {role === "admin" ? "Laboratory operations" : "Your research workspace"}</span><Link href="/">Explore SeqForge <ArrowUpRight size={15} /></Link></div>
         <main className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">{children}</main>
       </div>
     </div>

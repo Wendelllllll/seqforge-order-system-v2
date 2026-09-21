@@ -1,4 +1,4 @@
-import { blankReaction, blankSample, MAX_IMPORT_BYTES, MAX_REACTIONS, orderSchema, type OrderDraft, type SampleDraft } from "./order-intake";
+import { blankReaction, blankSample, MAX_IMPORT_BYTES, MAX_REACTIONS, orderSchema, sampleSchema, type OrderDraft, type SampleDraft } from "./order-intake";
 
 export const SAMPLE_COLUMNS = ["sampleKey", "sampleName", "tubeLabel", "plateLabel", "well", "templateType", "templateLength", "concentration", "preparation", "notes"] as const;
 export const REACTION_COLUMNS = ["primerSource", "primerName", "primerConcentration", "storedPrimerReference", "primerSequence", "purification", "synthesisScale", "modification5", "modification3", "modificationInternal", "specialProtocol"] as const;
@@ -50,7 +50,7 @@ export function importSamples(text: string, order: Omit<OrderDraft, "samples">):
   const seenHeaders = new Set<string>();
   for (const name of header.cells) {
     if (seenHeaders.has(name)) errors.push(`Header: duplicate ${name}.`);
-    if (!(IMPORT_COLUMNS as readonly string[]).includes(name)) errors.push(`Header: unknown column ${name}. Download the V2 template; legacy files use a different format.`);
+    if (!(IMPORT_COLUMNS as readonly string[]).includes(name)) errors.push(`Header: unknown column ${name}. Download the current template for the supported column names.`);
     seenHeaders.add(name);
   }
   if (errors.length) return fail(errors);
@@ -85,13 +85,14 @@ export function importSamples(text: string, order: Omit<OrderDraft, "samples">):
   }
   if (errors.length) return fail(errors);
   // Order-level fields can remain unfinished during sample import.
-  return { samples: parsed.success ? parsed.data.samples : entries.map((entry) => entry.sample), errors: [] };
+  return { samples: parsed.success ? parsed.data.samples : entries.map((entry) => sampleSchema.parse(entry.sample)), errors: [] };
 }
 
 export function templateCsv(container: OrderDraft["container"], mode: OrderDraft["submissionMode"]) {
   const sample = { ...blankSample("S1"), sampleName: "Demo plasmid", tubeLabel: container === "Tubes" ? "Tube-1" : "", plateLabel: container === "Plate" ? "Plate-1" : "", well: container === "Plate" ? "A1" : "", templateLength: "3200", concentration: "100" };
   const reaction = { ...blankReaction(), primerSource: mode === "Standard" ? "SeqForge universal primer" : "Included in mix", primerName: "M13F" };
   const values = { ...sample, ...reaction };
+  const columns = IMPORT_COLUMNS.filter((key) => container === "Tubes" ? !["plateLabel", "well"].includes(key) : key !== "tubeLabel");
   const encode = (value: string) => `"${value.replaceAll('"', '""')}"`;
-  return IMPORT_COLUMNS.join(",") + "\r\n" + IMPORT_COLUMNS.map((key) => encode(String(values[key]))).join(",") + "\r\n";
+  return columns.join(",") + "\r\n" + columns.map((key) => encode(String(values[key]))).join(",") + "\r\n";
 }

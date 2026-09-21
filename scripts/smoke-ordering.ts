@@ -29,6 +29,16 @@ async function main() {
   const otherCustomer = await signIn("scientist@demo.local", "DemoCustomer!2026");
   const admin = await signIn("admin@seqforge.local", "SeqForgeDemo!2026");
   const order = blankOrder();
+  order.fulfillment = { deliveryMethod: "Pickup", pickupLocation: "Demo institute, building A, room 101", pickupInstructions: "Reception", contactName: "Demo Scientist", contactPhone: "555-0100", piName: "Demo PI", billingOrganization: "Demo University", billingContactName: "Demo Finance", billingEmail: "finance@demo.local", billingAddress: "1 Demo Way, Demo City", paymentMethod: "Invoice" };
+  order.fulfillment.pickupLocation = `V4-PICKUP-${stamp}`;
+  assert.equal((await request("/api/account/order-defaults", "", order.fulfillment, "PUT")).status, 401);
+  assert.equal((await request("/api/account/order-defaults", admin, order.fulfillment, "PUT")).status, 401);
+  assert.equal((await request("/api/account/order-defaults", customer, { ...order.fulfillment, paymentMethod: "Credit card" }, "PUT")).status, 400);
+  assert.equal((await fetch(origin + "/api/account/order-defaults", { method: "PUT", headers: { cookie: customer, origin: "https://example.invalid", "Content-Type": "application/json" }, body: JSON.stringify(order.fulfillment) })).status, 403);
+  assert.equal((await request("/api/account/order-defaults", customer, { ...order.fulfillment, userId: "forged-other-account" }, "PUT")).status, 200);
+  assert.ok((await (await request("/account", customer)).text()).includes(order.fulfillment.pickupLocation));
+  assert.ok((await (await request("/orders/new", customer)).text()).includes(order.fulfillment.pickupLocation));
+  assert.ok(!(await (await request("/account", otherCustomer)).text()).includes(order.fulfillment.pickupLocation));
   order.orderName = `SMOKE-DEMO-${stamp}`;
   order.container = "Plate";
   order.priority = "Same day requested";
@@ -49,10 +59,14 @@ async function main() {
   assert.equal(retry.status, 201);
   assert.equal((await retry.json()).id, id);
   assert.equal((await submit({ ...order, orderName: "Changed payload" })).status, 409);
+  assert.equal((await request("/api/orders", customer, { ...order, orderName: order.orderName.toLowerCase() })).status, 409);
+  assert.equal((await request("/api/account/order-defaults", customer, { ...order.fulfillment, pickupLocation: `UPDATED-${stamp}` }, "PUT")).status, 200);
   for (const path of [`/orders/${id}`, `/manifest/${id}`]) {
     const mine = await request(path, customer);
     assert.equal(mine.status, 200);
     const html = await mine.text();
+    assert.ok(html.includes(order.fulfillment.pickupLocation), "Order retains original pickup snapshot after account changes");
+    assert.ok(html.includes(order.fulfillment.billingEmail));
     assert.ok(html.includes("DEMO-STORED-7"), "Stored-primer details should persist");
     assert.ok(html.includes("Same day requested"));
     assert.ok(html.includes("$9.00"), "Server calculates two plate Standard reactions despite forged client pricing");

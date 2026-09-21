@@ -52,3 +52,6 @@ next-env.d.ts
 # local transfer archives
 *.zip
 *.bundle
+
+# Local PostgreSQL clusters and development backups
+/storage/local-*/

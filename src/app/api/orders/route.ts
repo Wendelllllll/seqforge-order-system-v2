@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { createOrder, SubmissionConflict } from "@/lib/create-order";
+import { createOrder, DuplicateOrderName, SubmissionConflict } from "@/lib/create-order";
 import { issueLabel, orderSchema } from "@/lib/order-intake";
 import { prisma } from "@/lib/prisma";
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   try {
     return Response.json(await createOrder(prisma, session.user.id, parsed.data, submissionKey), { status: 201 });
   } catch (error) {
-    if (error instanceof SubmissionConflict) return Response.json({ error: error.message }, { status: 409 });
+    if (error instanceof SubmissionConflict || error instanceof DuplicateOrderName) return Response.json({ error: error.message }, { status: 409 });
     console.error("Order creation failed", error instanceof Error ? error.name : "Unknown error");
     return Response.json({ error: "Unable to save the order. Your entries are still available; please try again." }, { status: 503 });
   }

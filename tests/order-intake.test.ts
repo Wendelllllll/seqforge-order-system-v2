@@ -5,6 +5,7 @@ import { importSamples, readDelimited, templateCsv } from "../src/lib/order-impo
 
 function validOrder() {
   const order = blankOrder();
+  order.fulfillment = { deliveryMethod: "Pickup", pickupLocation: "Demo institute, building A, room 101", pickupInstructions: "Reception", contactName: "Demo Scientist", contactPhone: "555-0100", piName: "Demo PI", billingOrganization: "Demo University", billingContactName: "Demo Finance", billingEmail: "finance@demo.local", billingAddress: "1 Demo Way, Demo City", paymentMethod: "Invoice" };
   order.orderName = "Synthetic sequencing project";
   Object.assign(order.samples[0], { sampleName: "Clone 1", tubeLabel: "Tube-1" });
   Object.assign(order.samples[0].reactions[0], { primerSource: "SeqForge universal primer", primerName: "M13F" });
@@ -115,4 +116,36 @@ test("invalid imports never return a partial sample list", () => {
   const original = structuredClone(order);
   importSamples(template, order);
   assert.deepEqual(order, original);
+});
+
+test("V4 requires pickup and billing details and rejects unavailable payment methods", () => {
+  const order = validOrder();
+  assert.equal(orderSchema.safeParse({ ...order, fulfillment: undefined }).success, false);
+  assert.equal(orderSchema.safeParse({ ...order, fulfillment: { ...order.fulfillment, billingEmail: "bad" } }).success, false);
+  assert.equal(orderSchema.safeParse({ ...order, fulfillment: { ...order.fulfillment, paymentMethod: "Credit card" } }).success, false);
+  assert.equal(orderSchema.safeParse({ ...order, fulfillment: { ...order.fulfillment, pickupLocation: "" } }).success, false);
+  assert.equal(orderSchema.safeParse({ ...order, fulfillment: { ...order.fulfillment, deliveryMethod: "Ship to SeqForge", pickupLocation: "" } }).success, true);
+  order.fulfillment.paymentMethod = "Purchase order";
+  assert.equal(orderSchema.safeParse(order).success, false);
+  order.poNumber = "PO-123";
+  assert.equal(orderSchema.safeParse(order).success, true);
+});
+
+test("V4 CSV preserves detailed sample and primer data with incomplete order details", () => {
+  const header = "sampleKey,sampleName,plateLabel,well,templateType,templateLength,concentration,preparation,notes,primerSource,primerName,primerConcentration,storedPrimerReference,primerSequence,purification,synthesisScale,modification5,modification3,modificationInternal,specialProtocol";
+  const row = 'S1,Clone,P1,a01,Plasmid DNA,3200,100,None requested,"notes, kept",SeqForge synthesized primer,Custom-F,,,acgtn,HPLC,100 nmol,5mod,3mod,internal,GC-rich';
+  const result = importSamples(header + "\n" + row, { ...blankOrder(), container: "Plate" });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.samples[0].well, "A1");
+  assert.equal(result.samples[0].notes, "notes, kept");
+  assert.equal(result.samples[0].templateLength, "3200");
+  assert.equal(result.samples[0].concentration, "100");
+  const reaction = result.samples[0].reactions[0];
+  assert.equal(reaction.primerSequence, "ACGTN");
+  assert.equal(reaction.purification, "HPLC");
+  assert.equal(reaction.modificationInternal, "internal");
+  assert.equal(reaction.specialProtocol, "GC-rich");
+  assert.ok(!readDelimited(templateCsv("Tubes", "Standard"))[0].cells.includes("well"));
+  assert.ok(!readDelimited(templateCsv("Plate", "Standard"))[0].cells.includes("tubeLabel"));
+  assert.ok(importSamples(templateCsv("Plate", "Standard"), validOrder()).errors.some((e) => e.includes("tubeLabel")));
 });

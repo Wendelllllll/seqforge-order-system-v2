@@ -1,3 +1,4 @@
+import { orderDefaultsSchema } from "@/lib/order-defaults";
 import { OrderPricing } from "@/components/order-pricing";
 import type { ReactionDraft } from "@/lib/order-intake";
 
@@ -10,19 +11,31 @@ type ManifestSample = {
 export type ManifestOrder = {
   orderName: string; orderNumber?: string; poNumber: string | null; specialInstructions: string | null;
   priority: string; container: string; submissionMode: string; intakeVersion?: number;
-  samples: ManifestSample[]; pricingSnapshot?: unknown;
+  samples: ManifestSample[]; pricingSnapshot?: unknown; fulfillmentSnapshot?: unknown;
 };
 
 export function OrderManifest({ order }: { order: ManifestOrder }) {
+  const parsedDetails = orderDefaultsSchema.safeParse(order.fulfillmentSnapshot);
+  const details = parsedDetails.success ? parsedDetails.data : null;
   const reactions = order.samples.flatMap((sample) => sample.reactions.map((reaction, index) => ({ sample, reaction, index })));
   return <section className="panel submission-manifest">
     <div className="panel-heading">
-      <div><p className="eyebrow">Submission manifest · V3</p><h2 className="mt-1 text-lg font-bold">{order.orderName || "Untitled order"}</h2>{order.orderNumber ? <p className="mt-1 font-mono text-sm">{order.orderNumber}</p> : null}</div>
+      <div><p className="eyebrow">Submission manifest</p><h2 className="mt-1 text-lg font-bold">{order.orderName || "Untitled order"}</h2>{order.orderNumber ? <p className="mt-1 font-mono text-sm">{order.orderNumber}</p> : null}</div>
       <span className="metric-pill">{order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} · {reactions.length} {reactions.length === 1 ? "reaction" : "reactions"}</span>
     </div>
     <div className="space-y-3 border-b border-slate-200 p-5 text-sm">
       {order.intakeVersion === 1 ? <p>Legacy demo order: service and container choices were not recorded. Each original entry is preserved as one sample and one reaction.</p> : <p><strong>Priority:</strong> {order.priority} · <strong>Mode:</strong> {order.submissionMode} · <strong>Container:</strong> {order.container}</p>}
       <p><strong>PO / reference:</strong> {order.poNumber || "Not provided"}</p>
+      {details ? <div className="grid gap-3 sm:grid-cols-2">
+        <div><p><strong>Delivery:</strong> {details.deliveryMethod}</p>
+          {details.deliveryMethod === "Pickup" ? <><p className="whitespace-pre-wrap"><strong>Pickup:</strong> {details.pickupLocation}</p><p className="whitespace-pre-wrap">{details.pickupInstructions}</p></> : null}
+          <p><strong>Contact:</strong> {details.contactName} · {details.contactPhone}</p>
+        </div>
+        <div><p><strong>PI:</strong> {details.piName || "Not provided"}</p><p><strong>Bill to:</strong> {details.billingOrganization}</p>
+          <p>{details.billingContactName} · {details.billingEmail}</p><p className="whitespace-pre-wrap">{details.billingAddress}</p>
+          <p><strong>Payment method:</strong> {details.paymentMethod} · No payment collected</p>
+        </div>
+      </div> : order.orderNumber ? <p>Pickup and billing details were not recorded for this historical order.</p> : null}
       <p className="text-slate-500">Service, preparation, stored primers, and synthesis requests require lab confirmation. Turnaround, delivery and sample acceptance require lab confirmation.</p>
     </div>
     <div className="overflow-x-auto">

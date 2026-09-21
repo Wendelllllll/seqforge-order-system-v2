@@ -103,3 +103,23 @@ select:not(:disabled) {
     @apply border-b-0;
   }
 }
+
+/* Shared SeqForge identity. Public website is dark; working forms stay light. */
+.seqforge-wordmark{display:inline-flex;flex-direction:column;line-height:1;text-decoration:none;color:#0c1f2f;flex-shrink:0}
+.seqforge-wordmark>span{font-family:Georgia,"Times New Roman",serif;font-size:29px;letter-spacing:-1.4px}
+.seqforge-wordmark small{margin-top:7px;font-size:7px;font-weight:600;letter-spacing:2.5px;color:#40607c}
+.wordmark-dot{color:#69849c}.wordmark-inverse{color:#ecf1f6}.wordmark-inverse small{color:#a2b6c7}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #395a77;outline-offset:4px}
+@layer components{
+ .button-primary{@apply rounded-md; background:#1c405f}.button-primary:hover{background:#102c44}
+ .button-secondary{@apply rounded-md}
+ .field-input{@apply rounded-md}.field-input:focus{border-color:#4a6985;box-shadow:0 0 0 2px #dae3eb}
+ .panel{@apply rounded-lg;box-shadow:0 3px 15px #0e1d2a04}
+ .eyebrow{color:#2d4e6a}.service-chip{border-color:#c5d3e0;background:#ebf0f5;color:#2b4760;border-radius:4px}
+ .metric-pill{border-radius:4px}
+}
+.portal-shell{background:#eef2f5}.portal-sidebar{background:#08141f}.portal-nav-active{background:#b4c8d91c;color:#c4daed;border-left:2px solid #9fbcd6}
+.portal-topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:22px 40px;border-bottom:1px solid #d8dee4;background:#f5f8fb;font-size:12px;color:#546574}.portal-topbar a{display:flex;gap:8px;align-items:center;color:#1c3b56;font-weight:600}
+.auth-art-panel{background:#06121d!important;isolation:isolate}.auth-art-panel .sequence-art{position:absolute;inset:0;width:180%;height:100%;left:-45%;z-index:-1;opacity:.55}.auth-art-panel .auth-statement{font-family:Georgia,"Times New Roman",serif;font-size:48px;font-weight:400;line-height:1.13;letter-spacing:-.04em}
+@media(max-width:1023px){.portal-topbar{display:none}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}.sequence-ribbons{animation:none!important}}

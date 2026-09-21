@@ -1,3 +1,11 @@
+# V4 update — 2026-09-10
+
+Customer feedback implementation: account-scoped unique order names, clear tube/plate selection, container-specific CSV templates and automatic upload validation/preview, reusable account pickup and PI/billing details, invoice/PO selection, unavailable credit-card option, immutable order billing/delivery snapshots. Actual payment processing, invoice sending, scheduled pickup and shared lab billing remain unimplemented. PO number remains order-specific.
+
+V4 adds a nullable canonical order-name key and JSON account defaults/order snapshots. Existing historical duplicates are retained; future reuse is blocked. Blank legacy fulfillment details are not invented.
+
+Verified locally: lint, TypeScript, 20 unit tests, production build, isolated PostgreSQL integration tests (including duplicate-name races and immutable snapshots), and HTTP smoke tests (including defaults ownership and cross-origin rejection). Browser checks confirmed plate/tube field switching and CSV preview/apply populating sample and primer fields. A PostgreSQL backup was created before applying V4 locally. Earlier sections below describe previous versions.
+
 ## V3 verified on this PC
 
 PostgreSQL 18.6 is running locally on port 55432. The read-only SQLite transfer preserved 4 users/accounts, 3 existing orders, 3 samples, 6 reactions, 2 result records and 7 status records; files remain in local storage. Subsequent smoke runs added clearly named synthetic data.
@@ -94,3 +102,12 @@ Payments, pricing, non-Sanger service types, production legacy migration, and AB
 Validation ran against the local demo only. Synthetic smoke-test accounts/orders/results remain in this PC's ignored local database/storage. Print styling is implemented; a physical printout and large multi-page manifests still need user/lab acceptance testing.
 
 Next: confirm lab acceptance rules and representative bulk files, then deploy a separate customer trial environment. Additional production work includes submission idempotency, concurrent-load testing, password recovery, notifications, pricing/shipping, result replacement cleanup and audit history.
+
+
+## V4 integrated website and account update — September 21, 2026
+
+- Coastal-blue public homepage, original science illustration, responsive service/pricing/FAQ sections and coordinated accessible motion.
+- Shared branding across sign-in and customer/admin portal; ordering remains connected to the existing backend.
+- Editable account profile with authenticated validation and persisted name, organization, laboratory and phone. Email changes remain future scope.
+- Includes V4 account defaults, order fulfillment snapshots, distinct tube/plate intake, automatic spreadsheet preview and per-customer unique order names.
+- Local credentials, PostgreSQL data, backups and uploaded results are excluded from Git. Production deployment remains pending.

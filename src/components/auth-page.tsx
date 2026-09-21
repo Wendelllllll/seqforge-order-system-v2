@@ -1,17 +1,18 @@
 import type { ReactNode } from "react";
 
+import { SequenceArt } from "@/components/sequence-art";
 import { Brand } from "@/components/brand";
 
 export function AuthPage({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children: ReactNode }) {
   return (
     <main className="grid min-h-screen lg:grid-cols-[0.85fr_1.15fr]">
-      <section className="relative hidden overflow-hidden bg-slate-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute inset-0 opacity-20" aria-hidden="true" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, #22d3ee 0, transparent 22%), radial-gradient(circle at 80% 70%, #0e7490 0, transparent 28%)" }} />
+      <section className="auth-art-panel relative hidden overflow-hidden bg-slate-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+        <SequenceArt id="auth" />
         <div className="relative"><Brand inverse /></div>
         <div className="relative max-w-lg">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Forging the Future of Genomic Science</p>
-          <p className="mt-5 text-3xl font-bold leading-tight tracking-tight">A direct path from sample submission to sequencing results.</p>
-          <div className="mt-8 h-px w-20 bg-cyan-400" />
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">Forging the Future of Genomic Science</p>
+          <p className="auth-statement mt-5">A direct path from sample submission to sequencing results.</p>
+          <div className="mt-8 h-px w-20 bg-sky-200" />
         </div>
         <p className="relative text-xs text-slate-500">SeqForge, Inc. · San Diego, California</p>
       </section>

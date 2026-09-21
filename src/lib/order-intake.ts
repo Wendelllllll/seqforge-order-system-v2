@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blankDefaults, orderDefaultsSchema } from "./order-defaults";
 
 export const PRIORITIES = ["Standard", "Same day requested"] as const;
 export const CONTAINERS = ["Tubes", "Plate"] as const;
@@ -59,6 +60,7 @@ export const sampleSchema = z.object({
 });
 
 export const orderSchema = z.object({
+  fulfillment: orderDefaultsSchema,
   orderName: z.string().trim().min(1, "Order name is required.").max(120),
   poNumber: z.string().trim().max(80),
   specialInstructions: z.string().trim().max(2000),
@@ -67,6 +69,11 @@ export const orderSchema = z.object({
   submissionMode: z.enum(MODES),
   samples: z.array(sampleSchema).min(1, "Add at least one sample.").max(MAX_REACTIONS),
 }).superRefine((order, ctx) => {
+  const details = order.fulfillment;
+  const required = ["contactName", "contactPhone", "billingOrganization", "billingContactName", "billingEmail", "billingAddress"] as const;
+  for (const key of required) if (!details[key]) ctx.addIssue({ code: "custom", path: ["fulfillment", key], message: "This detail is required for pickup or billing." });
+  if (details.deliveryMethod === "Pickup" && !details.pickupLocation) ctx.addIssue({ code: "custom", path: ["fulfillment", "pickupLocation"], message: "Enter the institution, building, room and collection point." });
+  if (details.paymentMethod === "Purchase order" && !order.poNumber) ctx.addIssue({ code: "custom", path: ["poNumber"], message: "Enter a PO number for purchase order billing." });
   const ids = new Set<string>();
   const locations = new Set<string>();
   if (reactionCount(order.samples) > MAX_REACTIONS) ctx.addIssue({ code: "custom", path: ["samples"], message: `This demo supports at most ${MAX_REACTIONS} reactions per order.` });
@@ -107,7 +114,7 @@ export function blankSample(sampleKey = "S1"): SampleDraft {
   return { sampleKey, sampleName: "", tubeLabel: "", plateLabel: "", well: "", templateType: "Plasmid DNA", templateLength: "", concentration: "", preparation: "None requested", notes: "", reactions: [blankReaction()] };
 }
 export function blankOrder(): OrderDraft {
-  return { orderName: "", poNumber: "", specialInstructions: "", priority: "Standard", container: "Tubes", submissionMode: "Standard", samples: [blankSample()] };
+  return { fulfillment: blankDefaults(), orderName: "", poNumber: "", specialInstructions: "", priority: "Standard", container: "Tubes", submissionMode: "Standard", samples: [blankSample()] };
 }
 export function reactionCount(samples: { reactions: unknown[] }[]) {
   return samples.reduce((sum, sample) => sum + sample.reactions.length, 0);

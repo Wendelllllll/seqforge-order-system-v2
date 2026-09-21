@@ -21,6 +21,7 @@ model User {
   organization  String
   labName       String
   phone         String?
+  orderDefaults Json?
   sessions      Session[]
   accounts      Account[]
   orders        Order[]
@@ -78,12 +79,14 @@ model Order {
   submissionKey       String?
   submissionHash      String?
   pricingSnapshot     Json?
+  fulfillmentSnapshot Json?
   userId              String
   service             String          @default("SANGER")
   intakeVersion       Int             @default(1)
   priority            String          @default("Standard")
   container           String          @default("Tubes")
   submissionMode      String          @default("Standard")
+  orderNameKey        String?
   orderName           String
   poNumber            String?
   specialInstructions String?
@@ -99,6 +102,7 @@ model Order {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@unique([userId, submissionKey])
+  @@unique([userId, orderNameKey])
 }
 
 model OrderCounter {

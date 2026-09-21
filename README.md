@@ -1,8 +1,27 @@
-# SeqForge Order System V3
+# SeqForge Order System V4
 
-SeqForge's Sanger sequencing customer portal and laboratory order workflow, built with Next.js 16, React 19, TypeScript, Better Auth, Prisma 6 and PostgreSQL. V3 runs locally against PostgreSQL; public production deployment is still pending.
+SeqForge's Sanger sequencing customer portal and laboratory order workflow, built with Next.js 16, React 19, TypeScript, Better Auth, Prisma 6 and PostgreSQL. V4 runs locally against PostgreSQL; public production deployment is still pending.
 
 Repository: [Wendelllllll/seqforge-order-system-v2](https://github.com/Wendelllllll/seqforge-order-system-v2). The repository name is retained for continuity.
+
+## V4 customer workflow
+
+- New order names must be unique within a customer account, ignoring case and repeated whitespace. Existing historical duplicates are preserved. Submission retries still return the original order.
+- Tube and 96-well plate orders use separate choices, sample fields and CSV templates. Submit mixed containers as separate orders.
+- Uploading CSV/TSV/TXT automatically validates and previews sample/primer data. Applying the preview replaces the editable sample list. Excel workbooks must be exported as CSV. Order names, PO numbers, pickup and billing are not imported from sample spreadsheets.
+- Account → Reusable order details saves pickup location/instructions, contact name/phone, PI, billing organization/contact/email/address and payment method. New orders prefill these fields; each order can override them. Use the explicit save-defaults button to change future defaults. No cross-account or lab-wide sharing is enabled.
+- Invoice and Purchase order record billing intent only; PO billing requires a PO number on that order. Credit card is unavailable. No charges, invoice emails, pickup bookings or payment-provider calls occur.
+- Each new order saves a pickup/billing snapshot, visible in customer, admin and printable manifests. Editing account defaults never changes historical snapshots. Old orders are explicitly marked when these details were not recorded.
+
+Upgrade an existing V3 checkout: stop the app, back up PostgreSQL and result storage, run `npm ci`, `npm run setup`, then `npm run dev`. The additive migration preserves existing orders and account data. The application rejects old submission payloads without required V4 pickup/billing details; reload older open forms before submitting.
+
+## Website and account updates (September 2026)
+
+- Public homepage and customer/admin portals share the same application and order backend. The homepage remains available when signed in.
+- Light coastal-blue design with original SVG illustration, responsive navigation, service cards, live pricing estimate, FAQ and a reserved future-video area.
+- Coordinated entry/scroll transitions, sliding price selection and animated FAQ/mobile navigation respect reduced-motion preferences.
+- Account information supports editing first/last name, organization, laboratory and phone through an authenticated, validated endpoint. Login email remains read-only; pickup/billing defaults are saved separately.
+- Production launch tasks and estimates are recorded in `V4_TO_LAUNCH_ROADMAP.md`. This repository update does not deploy the service or enable live card payments.
 
 ## V3 pricing
 

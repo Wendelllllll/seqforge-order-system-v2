@@ -10,13 +10,21 @@ import { Field, SampleEditor, SelectField, TextField } from "@/components/sample
 import { blankOrder, blankSample, CONTAINERS, issueLabel, MAX_IMPORT_BYTES, MAX_REACTIONS, MODES, orderSchema, PRIORITIES, reactionCount, type OrderDraft, type SampleDraft } from "@/lib/order-intake";
 import { importSamples, templateCsv } from "@/lib/order-import";
 
-export function OrderForm() {
+import { OrderDefaultFields } from "@/components/order-default-fields";
+import { saveOrderDefaults } from "@/components/account-defaults-form";
+import { blankDefaults, type OrderDefaults } from "@/lib/order-defaults";
+
+export function OrderForm({ defaults = blankDefaults() }: { defaults?: OrderDefaults }) {
   const router = useRouter();
-  const [draft, setDraft] = useState<OrderDraft>(blankOrder);
+  const [draft, setDraft] = useState<OrderDraft>(() => ({ ...blankOrder(), fulfillment: defaults }));
+  const [savingDefaults, setSavingDefaults] = useState(false);
+  const [defaultsMessage, setDefaultsMessage] = useState("");
+  const [defaultsError, setDefaultsError] = useState("");
   const [review, setReview] = useState<OrderDraft | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
+  const importRevision = useRef(0);
   const submissionKey = useRef("");
   const [bulkText, setBulkText] = useState("");
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -27,6 +35,7 @@ export function OrderForm() {
   const count = reactionCount(draft.samples);
 
   function update<K extends keyof OrderDraft>(field: K, value: OrderDraft[K]) {
+    importRevision.current++;
     submissionKey.current = "";
     setDraft((current) => ({ ...current, [field]: value }));
     setPendingImport(null);
@@ -74,12 +83,20 @@ export function OrderForm() {
     finally { setLoading(false); submitting.current = false; }
   }
   async function readFile(file?: File) {
+    const revision = ++importRevision.current;
     setPendingImport(null);
     setImportErrors([]);
     if (!file) return;
     if (!/\.(csv|tsv|txt)$/i.test(file.name)) { setImportErrors(["Choose a .csv, .tsv, or .txt file."]); return; }
     if (file.size > MAX_IMPORT_BYTES) { setImportErrors(["The import is larger than 1 MB."]); return; }
-    try { setBulkText(await file.text()); }
+    try {
+      const text = await file.text();
+      if (revision !== importRevision.current) return;
+      setBulkText(text);
+      const result = importSamples(text, draft);
+      setImportErrors(result.errors);
+      setPendingImport(result.errors.length ? null : result.samples);
+    }
     catch { setImportErrors(["Unable to read this file. You can paste its contents below instead."]); }
   }
   function previewImport() {
@@ -90,7 +107,7 @@ export function OrderForm() {
   function downloadTemplate() {
     const url = URL.createObjectURL(new Blob([templateCsv(draft.container, draft.submissionMode)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
-    a.href = url; a.download = "seqforge-sanger-template.csv"; a.click();
+    a.href = url; a.download = `seqforge-${draft.container.toLowerCase()}-template.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const errorPanel = errors.length ? <div ref={alertRef} tabIndex={-1} role="alert" className="border-l-2 border-red-500 bg-red-50 p-4 text-sm text-red-800"><p className="font-bold">Please check these details</p><ul className="mt-2 list-disc space-y-1 pl-5">{errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div> : null;
@@ -98,7 +115,7 @@ export function OrderForm() {
   if (review) return <div className="space-y-6">
     <h2 ref={headingRef} tabIndex={-1} className="text-xl font-bold">Review your order</h2>
     <p className="text-sm text-slate-600">Check the labels on your physical samples against this manifest. Your order is saved only after you confirm below.</p>
-    <OrderManifest order={{ ...review, pricingSnapshot: priceOrder(review) }} />
+    <OrderManifest order={{ ...review, fulfillmentSnapshot: review.fulfillment, pricingSnapshot: priceOrder(review) }} />
     {errorPanel}
     <div className="flex flex-wrap justify-end gap-3">
       <button type="button" disabled={loading} onClick={() => { setReview(null); setErrors([]); }} className="button-secondary">Back to edit</button>
@@ -108,12 +125,18 @@ export function OrderForm() {
 
   return <form method="post" onSubmit={reviewOrder} className="space-y-6">
     <section className="panel">
-      <div className="panel-heading"><div><p className="eyebrow">Step 1</p><h2 className="mt-1 text-lg font-bold">Project and service</h2></div><span className="service-chip">Sanger sequencing · V3</span></div>
+      <div className="panel-heading"><div><p className="eyebrow">Step 1</p><h2 className="mt-1 text-lg font-bold">Project and service</h2></div><span className="service-chip">Sanger sequencing · V4</span></div>
       <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
-        <TextField label="Order name / reference *" value={draft.orderName} onChange={(v) => update("orderName", v)} required maxLength={120} />
-        <TextField label="PO number (optional)" value={draft.poNumber} onChange={(v) => update("poNumber", v)} maxLength={80} />
+        <TextField label="Order name / reference *" hint="Use a unique name for each order in your account, such as project + date + batch." value={draft.orderName} onChange={(v) => update("orderName", v)} required maxLength={120} />
+        <TextField label={draft.fulfillment.paymentMethod === "Purchase order" ? "PO number *" : "PO number (optional)"} required={draft.fulfillment.paymentMethod === "Purchase order"} value={draft.poNumber} onChange={(v) => update("poNumber", v)} maxLength={80} />
         <SelectField label="Priority requested" value={draft.priority} options={PRIORITIES} onChange={(v) => update("priority", v as OrderDraft["priority"])} />
-        <SelectField label="Container" value={draft.container} options={CONTAINERS} onChange={(v) => update("container", v as OrderDraft["container"])} />
+        <fieldset className="sm:col-span-2"><legend className="mb-3 text-sm font-bold">How are you submitting your samples?</legend>
+          <div className="grid gap-3 sm:grid-cols-2">{CONTAINERS.map((container) => <label key={container} className={`cursor-pointer rounded-lg border-2 p-4 ${draft.container === container ? "border-cyan-700 bg-cyan-50" : "border-slate-200"}`}>
+            <input type="radio" name="container" value={container} checked={draft.container === container} onChange={() => update("container", container)} className="mr-3" />
+            <strong>{container === "Plate" ? "96-well plates" : "Individual tubes"}</strong>
+            <p className="mt-2 text-sm text-slate-600">{container === "Plate" ? "Identify each plate and well (A1–H12). Plate reaction rates apply." : "Identify each tube by its physical label. Tube reaction rates apply."}</p>
+          </label>)}</div><p className="mt-2 text-sm text-slate-500">Submit tubes and plates as separate orders. Switching keeps your entries; check the required labels before submitting.</p>
+        </fieldset>
         <SelectField label="Submission mode" value={draft.submissionMode} options={MODES} onChange={(v) => update("submissionMode", v as OrderDraft["submissionMode"])} />
         <p className="self-center text-sm leading-6 text-slate-500">Standard: DNA and primer requests are recorded separately. Pre-mixed / Ready to load: use one physical tube or well per reaction and choose “Included in mix.” Confirm preparation instructions with the lab.</p>
         <div className="sm:col-span-2"><Field label="Special instructions (optional)"><textarea className="field-input min-h-24" maxLength={2000} value={draft.specialInstructions} onChange={(e) => update("specialInstructions", e.target.value)} /></Field></div>
@@ -121,11 +144,25 @@ export function OrderForm() {
       </div>
     </section>
 
+    <section className="panel space-y-5 p-5 sm:p-6">
+      <h2 className="text-lg font-bold">Pickup and billing details</h2>
+      <p className="text-sm text-slate-600">Your saved account details are prefilled. Changes apply to this order unless you save them as defaults. Required details are marked *.</p>
+      <fieldset disabled={savingDefaults}><OrderDefaultFields value={draft.fulfillment} onChange={(value) => { update("fulfillment", value); setDefaultsMessage(""); setDefaultsError(""); }} /></fieldset>
+      <button type="button" className="button-secondary" disabled={savingDefaults} onClick={async () => {
+        setSavingDefaults(true); setDefaultsMessage(""); setDefaultsError("");
+        try { await saveOrderDefaults(draft.fulfillment); setDefaultsMessage("Saved for future orders on this account. Past orders are unchanged."); }
+        catch (error) { setDefaultsError(error instanceof Error ? error.message : "Unable to save defaults."); }
+        finally { setSavingDefaults(false); }
+      }}>{savingDefaults ? "Saving…" : "Save these details as account defaults"}</button>
+      {defaultsMessage ? <p role="status" className="text-sm text-emerald-700">{defaultsMessage}</p> : null}
+      {defaultsError ? <p role="alert" className="text-sm text-red-700">{defaultsError}</p> : null}
+    </section>
+
     <section className="panel p-5 sm:p-6">
       <h2 className="text-lg font-bold">Import from a spreadsheet</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">Download the template for your selected container and mode. Use one row per reaction; repeat the same sample ID and identical sample details to add another primer. CSV, TSV, and spreadsheet paste are supported (1 MB, up to {MAX_REACTIONS} reactions). Legacy portal files need the V2 column headers.</p>
+      <p className="mt-2 text-sm leading-6 text-slate-500">Download the template for your selected container and mode. Use one row per reaction; repeat the same sample ID and identical sample details to add another primer. CSV, TSV, and spreadsheet paste are supported (1 MB, up to {MAX_REACTIONS} reactions). Sample names, locations, template details, concentrations and primer details are filled from the matching columns. Order name, pickup and billing are entered separately. Export Excel files as CSV first.</p>
       <div className="mt-4 flex flex-wrap items-end gap-4"><button type="button" className="button-secondary" onClick={downloadTemplate}>Download CSV template</button><Field label="Upload CSV, TSV or TXT"><input type="file" accept=".csv,.tsv,.txt" className="block max-w-full text-sm" onChange={(e) => { void readFile(e.target.files?.[0]); e.target.value = ""; }} /></Field></div>
-      <div className="mt-4"><Field label="Paste spreadsheet rows with column headers"><textarea className="field-input min-h-32 font-mono" value={bulkText} onChange={(e) => { setBulkText(e.target.value); setPendingImport(null); setImportErrors([]); }} /></Field></div>
+      <div className="mt-4"><Field label="Paste spreadsheet rows with column headers"><textarea className="field-input min-h-32 font-mono" value={bulkText} onChange={(e) => { importRevision.current++; setBulkText(e.target.value); setPendingImport(null); setImportErrors([]); }} /></Field></div>
       <button type="button" className="button-secondary mt-4" onClick={previewImport} disabled={!bulkText.trim()}>Validate import</button>
       {importErrors.length ? <div role="alert" className="mt-4 max-h-64 overflow-y-auto border-l-2 border-red-500 bg-red-50 p-4 text-sm text-red-800"><p className="font-bold">Import needs corrections. Existing entries are unchanged.</p><ul className="mt-2 list-disc pl-5">{importErrors.map((error, i) => <li key={i}>{error}</li>)}</ul></div> : null}
       {pendingImport ? <div className="mt-4 space-y-4 border border-cyan-200 bg-cyan-50 p-4">
