@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resultStorageDirectory } from "@/lib/result-storage";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
@@ -32,7 +33,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/o
   const safeOriginalName = file.name.replace(/[\r\n"]/g, "_").slice(0, 180) || "result-file";
   const extension = path.extname(safeOriginalName).replace(/[^a-zA-Z0-9.]/g, "").slice(0, 12);
   const storedName = `${randomUUID()}${extension}`;
-  const storageDirectory = path.join(process.cwd(), "storage", "results");
+  const storageDirectory = resultStorageDirectory();
   await mkdir(storageDirectory, { recursive: true });
   await writeFile(path.join(storageDirectory, storedName), new Uint8Array(await file.arrayBuffer()));
 

@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resultStorageDirectory } from "@/lib/result-storage";
 
 export async function GET(request: Request, context: RouteContext<"/api/results/[id]">) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -24,7 +25,7 @@ export async function GET(request: Request, context: RouteContext<"/api/results/
   }
 
   try {
-    const file = await readFile(path.join(process.cwd(), "storage", "results", result.storedName));
+    const file = await readFile(path.join(resultStorageDirectory(), result.storedName));
     const safeDownloadName = result.originalName.replace(/[\r\n"]/g, "_");
     return new Response(new Uint8Array(file), {
       headers: {
