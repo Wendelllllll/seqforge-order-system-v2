@@ -1,8 +1,6 @@
-import Link from "next/link";
-
 export function Brand({ inverse = false }: { inverse?: boolean }) {
-  return <Link href="/" className={`seqforge-wordmark ${inverse ? "wordmark-inverse" : ""}`} aria-label="SeqForge home">
-    <span>SeqForge<span className="wordmark-dot">.</span></span>
-    <small>GENOMIC SCIENCE</small>
-  </Link>;
+ return <a href="/" className={`seqforge-wordmark ${inverse ? "wordmark-inverse" : ""}`} aria-label="SeqForge home">
+ {/* eslint-disable-next-line @next/next/no-img-element */}
+ <img src="/brand/assets/logo.webp" width="230" height="55" alt="SeqForge" />
+ </a>;
 }

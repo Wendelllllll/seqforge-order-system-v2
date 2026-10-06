@@ -59,79 +59,10 @@ export function PortalShell({
 
   return (
     <div className="portal-shell min-h-screen">
-      <aside className="portal-sidebar fixed inset-y-0 left-0 z-30 hidden w-64 flex-col lg:flex">
-        <div className="border-b border-white/10 px-6 py-6">
-          <Brand inverse />
-        </div>
-        <div className="px-6 py-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {role === "admin" ? "Operations portal" : "Customer portal"}
-          </p>
-        </div>
-        <nav className="flex-1 space-y-1 px-3" aria-label="Primary navigation">
-          {navigation.map((item) => {
-            const active = !item.href.includes("#") && (item.href === "/orders" ? pathname === "/orders" || (pathname.startsWith("/orders/") && pathname !== "/orders/new") : pathname === item.href || (item.href === "/admin" && pathname.startsWith("/admin/")));
-            const Icon = item.icon;
-
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "portal-nav-active"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon className="h-4 w-4" aria-hidden="true" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="border-t border-white/10 p-4">
-          <div className="mb-3 px-2">
-            <p className="truncate text-sm font-semibold text-white">{user.name}</p>
-            <p className="mt-1 truncate text-xs text-slate-500">{user.email}</p>
-          </div>
-          <button
-            type="button"
-            onClick={signOut}
-            className="flex w-full items-center gap-3 px-2 py-2 text-sm font-medium text-slate-400 transition-colors hover:text-white"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Log out
-          </button>
-        </div>
-      </aside>
-
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden">
-          <div className="flex h-16 items-center justify-between px-4">
-            <Brand />
-            <button type="button" onClick={signOut} className="text-sm font-semibold text-slate-600">
-              Log out
-            </button>
-          </div>
-          <nav className="flex overflow-x-auto border-t border-slate-100 px-2" aria-label="Mobile navigation">
-            {navigation.slice(0, role === "admin" ? 3 : 4).map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="flex min-w-max items-center gap-1.5 px-3 py-3 text-xs font-semibold text-slate-600"
-                >
-                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </header>
-        <div className="portal-topbar"><span>SeqForge / {role === "admin" ? "Laboratory operations" : "Your research workspace"}</span><Link href="/">Explore SeqForge <ArrowUpRight size={15} /></Link></div>
-        <main className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">{children}</main>
-      </div>
+      <header className="workspace-header"><Brand /><div className="workspace-identity"><span>{user.name}</span><button type="button" onClick={signOut}><LogOut size={16} /> Log out</button></div></header>
+      <div className="workspace-navigation"><span>{role === "admin" ? "LABORATORY OPERATIONS" : "YOUR RESEARCH WORKSPACE"}</span><nav aria-label="Primary navigation">{navigation.map(item => { const Icon=item.icon; const active=!item.href.includes("#") && (item.href === "/orders" ? pathname === "/orders" || (pathname.startsWith("/orders/") && pathname !== "/orders/new") : pathname === item.href || (item.href === "/admin" && pathname.startsWith("/admin/"))); return <Link key={item.label} href={item.href} aria-current={active ? "page" : undefined} className={active ? "workspace-active" : ""}><Icon size={17}/>{item.label}</Link> })}</nav><a href="/">Explore SeqForge <ArrowUpRight size={15}/></a></div>
+      <main className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">{children}</main>
+      <footer className="workspace-footer">SeqForge Inc. <a href="/contact">Contact our team</a></footer>
     </div>
   );
 }
