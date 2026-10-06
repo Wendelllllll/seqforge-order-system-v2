@@ -18,8 +18,8 @@ Upgrade an existing V3 checkout: stop the app, back up PostgreSQL and result sto
 ## Website and account updates (September 2026)
 
 - Public homepage and customer/admin portals share the same application and order backend. The homepage remains available when signed in.
-- Light coastal-blue design with original SVG illustration, responsive navigation, service cards, live pricing estimate, FAQ and a reserved future-video area.
-- Coordinated entry/scroll transitions, sliding price selection and animated FAQ/mobile navigation respect reduced-motion preferences.
+- Navy and mint SeqForge website with a WebGL DNA hero, connected laboratory interactions, responsive navigation, and matching login/customer/admin portal styling. See [frontend integration](FRONTEND_INTEGRATION.md) for routing and scope.
+- Public order buttons open the existing authenticated Sanger workflow. Other service inquiries use Contact; public pricing details remain pending.
 - Account information supports editing first/last name, organization, laboratory and phone through an authenticated, validated endpoint. Login email remains read-only; pickup/billing defaults are saved separately.
 - Production launch tasks and estimates are recorded in `V4_TO_LAUNCH_ROADMAP.md`. This repository update does not deploy the service or enable live card payments.
 
