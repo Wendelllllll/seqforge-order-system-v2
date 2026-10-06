@@ -149,3 +149,114 @@ test("V4 CSV preserves detailed sample and primer data with incomplete order det
   assert.ok(!readDelimited(templateCsv("Plate", "Standard"))[0].cells.includes("tubeLabel"));
   assert.ok(importSamples(templateCsv("Plate", "Standard"), validOrder()).errors.some((e) => e.includes("tubeLabel")));
 });
+
+test("bulk plate entry generates 96 distinct locations with correct well ordering and valid order data", async () => {
+  const { addPlate } = await import("../src/lib/plate-intake");
+  for (const direction of ["column", "row"] as const) {
+    for (const mode of ["Standard", "Pre-mixed", "Ready to load"] as const) {
+      const order = { ...validOrder(), container: "Plate" as const, submissionMode: mode, samples: [blankSample()] };
+      const samples = addPlate(order, { label: "P1", count: 96, direction, prefix: "Clone", primerName: "Custom-F" });
+      assert.equal(samples.length, 96);
+      assert.equal(samples[0].well, "A1");
+      assert.equal(samples[1].well, direction === "column" ? "B1" : "A2");
+      assert.equal(samples[95].well, "H12");
+      assert.equal(new Set(samples.map(s => s.well)).size, 96);
+      assert.equal(orderSchema.safeParse({ ...order, samples }).success, true);
+      samples[0].reactions[0].primerName = "Changed";
+      assert.equal(samples[1].reactions[0].primerName, "Custom-F");
+    }
+  }
+});
+
+test("bulk plate entry preserves existing work and rejects duplicate plates and reaction overflow", async () => {
+  const { addPlate } = await import("../src/lib/plate-intake");
+  const order = { ...validOrder(), container: "Plate" as const, samples: [blankSample()] };
+  const options = { label: "P1", count: 96, direction: "column" as const, prefix: "Clone", primerName: "Custom-F" };
+  order.samples = addPlate(order, options);
+  assert.throws(() => addPlate(order, { ...options, label: " p1 " }), /already exists/);
+  const original = structuredClone(order.samples);
+  order.samples = addPlate(order, { ...options, label: "P2" });
+  assert.equal(order.samples.length, 192);
+  assert.deepEqual(order.samples.slice(0, 96), original);
+  assert.equal(new Set(order.samples.map(s => s.sampleKey)).size, 192);
+  assert.throws(() => addPlate(order, { ...options, label: "P3" }), /250/);
+  assert.throws(() => addPlate(order, { ...options, count: 0 }), /1–96/);
+});
+
+test("96-well CSV import preserves every sample, well and primer and rejects duplicate locations atomically", () => {
+  const order = { ...validOrder(), container: "Plate" as const };
+  const header = 'sampleKey,sampleName,plateLabel,well,templateType,primerSource,primerName';
+  const rows = Array.from({ length: 96 }, (_, i) => `S${i + 1},Clone-${i + 1},P1,${'ABCDEFGH'[i % 8]}${Math.floor(i / 8) + 1},Plasmid DNA,Customer supplied,Primer-${i + 1}`);
+  const result = importSamples([header, ...rows].join('\r\n'), order);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.samples.length, 96);
+  for (let i = 0; i < 96; i++) {
+    assert.equal(result.samples[i].sampleName, `Clone-${i + 1}`);
+    assert.equal(result.samples[i].well, `${'ABCDEFGH'[i % 8]}${Math.floor(i / 8) + 1}`);
+    assert.equal(result.samples[i].reactions[0].primerName, `Primer-${i + 1}`);
+  }
+  rows[95] = rows[95].replace('H12', 'A1');
+  const invalid = importSamples([header, ...rows].join('\n'), order);
+  assert.equal(invalid.samples.length, 0);
+  assert.ok(invalid.errors.some(error => error.includes('already used')));
+});
+
+test("original live-site CSV and TXT import with original headers and trailing empty columns", async () => {
+  const { readFileSync } = await import("node:fs");
+  const order = { ...validOrder(), container: "Plate" as const };
+  for (const filename of ["sample_dnaForm.csv", "sample_text_dnaForm.txt"]) {
+    const text = readFileSync(`public/templates/${filename}`, "utf8");
+    const ambiguous = importSamples(text, order);
+    assert.equal(ambiguous.samples.length, 0);
+    assert.ok(ambiguous.errors.some(e => e.includes("Both My primers")));
+    const result = importSamples(text, order, "universal");
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.samples.length, 2);
+    assert.equal(result.samples[0].plateLabel, "44");
+    assert.equal(result.samples[0].well, "A1");
+    assert.equal(result.samples[1].well, "B1");
+    assert.equal(result.samples[0].sampleName, "5dna");
+    assert.equal(result.samples[0].reactions[0].primerSource, "SeqForge universal primer");
+    assert.equal(result.samples[0].reactions[0].primerName, "AOX1-Rev");
+    assert.equal(result.samples[0].concentration, "77");
+    const custom = importSamples(text, order, "customer");
+    assert.deepEqual(custom.errors, []);
+    assert.equal(custom.samples[0].reactions[0].primerSource, "Customer supplied");
+  }
+});
+
+test("legacy imports preserve preparation requests, protocol, repeated reactions and reject lost data", async () => {
+  const { LEGACY_COLUMNS } = await import("../src/lib/legacy-order-import");
+  const header = LEGACY_COLUMNS.join(',');
+  const order = { ...validOrder(), container: "Plate" as const };
+  const first = '1,A1,P1,Clone 1,Plasmid - Needs Miniprep,3200,50,Custom-F,5,,GC-Rich';
+  const second = '2,A1,P1,Clone 1,Plasmid - Needs Miniprep,3200,50,Custom-R,5,,Di Nucleotide Repeat';
+  const result = importSamples([header, first, second].join('\n'), order);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.samples.length, 1);
+  assert.equal(result.samples[0].reactions.length, 2);
+  assert.equal(result.samples[0].preparation, "Miniprep requested");
+  assert.equal(result.samples[0].reactions[1].specialProtocol, "Dinucleotide repeat");
+  for (const bad of [first.replace('Plasmid - Needs Miniprep', 'Nanopore Sequencing'), first + ',DATA', first.replace('GC-Rich','Unknown protocol')]) {
+    const invalid = importSamples([header, bad].join('\n'), order);
+    assert.equal(invalid.samples.length, 0);
+    assert.ok(invalid.errors.length);
+  }
+  assert.ok(importSamples([header, first, first].join('\n'), order).errors.length);
+  assert.ok(importSamples([header, first, second.replace('Clone 1', 'Different DNA')].join('\n'), order).errors.length);
+  assert.ok(importSamples([header, first].join('\n'), { ...order, submissionMode: "Pre-mixed" }).errors.length);
+});
+
+test("legacy template handles tube labels, blank premix primers and original compact paste headings", async () => {
+  const { LEGACY_COLUMNS } = await import("../src/lib/legacy-order-import");
+  const order = validOrder();
+  const compact = '#,wellID,Tubelabel,DNAName,DNAtype,TemplateLengthBP,Conc,Myprimer,Conc,SeqForgePrimer,Specialprotocol';
+  const row = '1,A1,Tube-1,Clone 1,PCR - Needs cleanup,500,20,Custom,5,,None Known';
+  const result = importSamples(compact+'\n'+row, order);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.samples[0].tubeLabel, 'Tube-1');
+  assert.equal(result.samples[0].preparation, 'PCR cleanup requested');
+  const premix = importSamples(LEGACY_COLUMNS.join(',')+'\n1,A1,Tube-1,Clone 1,Plasmid,,,,,,None Known', {...order, submissionMode:'Pre-mixed'});
+  assert.deepEqual(premix.errors, []);
+  assert.equal(premix.samples[0].reactions[0].primerSource, 'Included in mix');
+});

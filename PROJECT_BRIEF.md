@@ -4,13 +4,13 @@
 
 We are SeqForge, Inc., a biotechnology / molecular biology service company based in San Diego, California.
 
-SeqForge acquired / continued the operations of Retrogen in 2026.
+SeqForge continued the established sequencing business in 2026.
 
 Our current customer ordering website is:
 
 https://order.seqforge.com
 
-The legacy system was inherited from Retrogen and is old, unstable, and has multiple bugs. For example, new customer registration is currently affected by Google reCAPTCHA problems.
+The legacy system was inherited from the previous operator and is old, unstable, and has multiple bugs. For example, new customer registration is currently affected by Google reCAPTCHA problems.
 
 We do NOT want to spend significant effort rebuilding or preserving the legacy application.
 
@@ -343,7 +343,7 @@ Important data we MAY eventually migrate:
 * Customer-specific pricing
 * Active orders
 
-Historical Retrogen application code should NOT be copied blindly.
+Historical SeqForge application code should NOT be copied blindly.
 
 ---
 
@@ -564,7 +564,7 @@ Do not unnecessarily rewrite working parts.
 
 Do not modify files outside this project folder.
 
-Do not access or modify the existing production SeqForge / Retrogen ordering system.
+Do not access or modify the existing production SeqForge ordering system.
 
 Do not use production credentials.
 

@@ -3,11 +3,13 @@
 import { LoaderCircle, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { PlateBuilder } from "@/components/plate-builder";
 import { OrderPricing } from "@/components/order-pricing";
 import { priceOrder } from "@/lib/pricing";
 import { OrderManifest } from "@/components/order-manifest";
 import { Field, SampleEditor, SelectField, TextField } from "@/components/sample-editor";
 import { blankOrder, blankSample, CONTAINERS, issueLabel, MAX_IMPORT_BYTES, MAX_REACTIONS, MODES, orderSchema, PRIORITIES, reactionCount, type OrderDraft, type SampleDraft } from "@/lib/order-intake";
+import type { LegacyPrimerChoice } from "@/lib/legacy-order-import";
 import { importSamples, templateCsv } from "@/lib/order-import";
 
 import { OrderDefaultFields } from "@/components/order-default-fields";
@@ -16,6 +18,7 @@ import { blankDefaults, type OrderDefaults } from "@/lib/order-defaults";
 
 export function OrderForm({ defaults = blankDefaults() }: { defaults?: OrderDefaults }) {
   const router = useRouter();
+  const [expandedSample, setExpandedSample] = useState<number | null>(null);
   const [draft, setDraft] = useState<OrderDraft>(() => ({ ...blankOrder(), fulfillment: defaults }));
   const [savingDefaults, setSavingDefaults] = useState(false);
   const [defaultsMessage, setDefaultsMessage] = useState("");
@@ -26,6 +29,7 @@ export function OrderForm({ defaults = blankDefaults() }: { defaults?: OrderDefa
   const submitting = useRef(false);
   const importRevision = useRef(0);
   const submissionKey = useRef("");
+  const [legacyPrimerChoice, setLegacyPrimerChoice] = useState<LegacyPrimerChoice>("require-single");
   const [bulkText, setBulkText] = useState("");
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [pendingImport, setPendingImport] = useState<SampleDraft[] | null>(null);
@@ -93,14 +97,14 @@ export function OrderForm({ defaults = blankDefaults() }: { defaults?: OrderDefa
       const text = await file.text();
       if (revision !== importRevision.current) return;
       setBulkText(text);
-      const result = importSamples(text, draft);
+      const result = importSamples(text, draft, legacyPrimerChoice);
       setImportErrors(result.errors);
       setPendingImport(result.errors.length ? null : result.samples);
     }
     catch { setImportErrors(["Unable to read this file. You can paste its contents below instead."]); }
   }
   function previewImport() {
-    const result = importSamples(bulkText, draft);
+    const result = importSamples(bulkText, draft, legacyPrimerChoice);
     setImportErrors(result.errors);
     setPendingImport(result.errors.length ? null : result.samples);
   }
@@ -160,8 +164,20 @@ export function OrderForm({ defaults = blankDefaults() }: { defaults?: OrderDefa
 
     <section className="panel p-5 sm:p-6">
       <h2 className="text-lg font-bold">Import from a spreadsheet</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">Download the template for your selected container and mode. Use one row per reaction; repeat the same sample ID and identical sample details to add another primer. CSV, TSV, and spreadsheet paste are supported (1 MB, up to {MAX_REACTIONS} reactions). Sample names, locations, template details, concentrations and primer details are filled from the matching columns. Order name, pickup and billing are entered separately. Export Excel files as CSV first.</p>
-      <div className="mt-4 flex flex-wrap items-end gap-4"><button type="button" className="button-secondary" onClick={downloadTemplate}>Download CSV template</button><Field label="Upload CSV, TSV or TXT"><input type="file" accept=".csv,.tsv,.txt" className="block max-w-full text-sm" onChange={(e) => { void readFile(e.target.files?.[0]); e.target.value = ""; }} /></Field></div>
+      <p className="mt-2 text-sm leading-6 text-slate-500">Existing SeqForge CSV and TXT templates are accepted unchanged, including empty trailing columns. The original “Tube label” column identifies the plate when Plate is selected. My primers imports as customer supplied; review stored-primer sources in Details. For additional fields, use the extended template. Use one row per reaction; repeat the same sample ID and identical sample details to add another primer. CSV, TSV, and spreadsheet paste are supported (1 MB, up to {MAX_REACTIONS} reactions). Sample names, locations, template details, concentrations and primer details are filled from the matching columns. Order name, pickup and billing are entered separately. As on the existing site, save Excel files as CSV or tab-delimited TXT before uploading. Template downloads contain example data: replace it with your samples.</p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <a className="button-secondary" href="/templates/sample_dnaForm.csv" download>Download SeqForge CSV template</a>
+        <a className="button-secondary" href="/templates/LIMS_Upload_template.xlsx" download>Download SeqForge Excel template</a>
+        <a className="button-secondary" href="/templates/sample_text_dnaForm.txt" download>Download SeqForge TXT template</a>
+      </div>
+      <div className="mt-4"><Field label="Legacy primer choice" hint="Only applies when both My primers and SeqForge Primers are filled. Choose the intended source; one row remains one reaction.">
+        <select className="field-input" value={legacyPrimerChoice} onChange={e => { importRevision.current++; setLegacyPrimerChoice(e.target.value as LegacyPrimerChoice); setPendingImport(null); setImportErrors([]); }}>
+          <option value="require-single">Ask me if both primer columns are filled</option>
+          <option value="customer">Use My primers when both are filled</option>
+          <option value="universal">Use SeqForge Primers when both are filled</option>
+        </select>
+      </Field></div>
+      <div className="mt-4 flex flex-wrap items-end gap-4"><button type="button" className="button-secondary" onClick={downloadTemplate}>Download extended CSV template</button><Field label="Upload CSV, TSV or TXT"><input type="file" accept=".csv,.tsv,.txt" className="block max-w-full text-sm" onChange={(e) => { void readFile(e.target.files?.[0]); e.target.value = ""; }} /></Field></div>
       <div className="mt-4"><Field label="Paste spreadsheet rows with column headers"><textarea className="field-input min-h-32 font-mono" value={bulkText} onChange={(e) => { importRevision.current++; setBulkText(e.target.value); setPendingImport(null); setImportErrors([]); }} /></Field></div>
       <button type="button" className="button-secondary mt-4" onClick={previewImport} disabled={!bulkText.trim()}>Validate import</button>
       {importErrors.length ? <div role="alert" className="mt-4 max-h-64 overflow-y-auto border-l-2 border-red-500 bg-red-50 p-4 text-sm text-red-800"><p className="font-bold">Import needs corrections. Existing entries are unchanged.</p><ul className="mt-2 list-disc pl-5">{importErrors.map((error, i) => <li key={i}>{error}</li>)}</ul></div> : null}
@@ -175,7 +191,28 @@ export function OrderForm({ defaults = blankDefaults() }: { defaults?: OrderDefa
 
     <section className="panel">
       <div className="panel-heading"><div><p className="eyebrow">Step 2</p><h2 className="mt-1 text-lg font-bold">Physical samples and reactions</h2><p className="mt-1 text-sm text-slate-500">Add each physical sample once, then add its sequencing primers.</p></div><span className="metric-pill">{draft.samples.length} samples · {count} reactions</span></div>
-      {draft.samples.map((sample, index) => <SampleEditor key={index} sample={sample} number={index + 1} container={draft.container} mode={draft.submissionMode} canRemove={draft.samples.length > 1} canAddReaction={count < MAX_REACTIONS} onRemove={() => update("samples", draft.samples.filter((_, i) => i !== index))} onChange={(value) => update("samples", draft.samples.map((s, i) => i === index ? value : s))} />)}
+      {draft.container === "Plate" && <PlateBuilder order={draft} onAdd={samples => { update("samples", samples); setExpandedSample(null); }} />}
+      {draft.container === "Plate" && <div className="overflow-x-auto p-5">
+        <p className="mb-3 text-sm text-slate-600">Paste one column of sample names into a DNA name cell to fill consecutive rows within that plate. Open Details for concentrations, primer sources, or extra reactions.</p>
+        <table className="data-table"><thead><tr><th>Plate / well</th><th>DNA name</th><th>First primer</th><th>Reactions</th><th>Details</th></tr></thead><tbody>
+          {draft.samples.map((sample, index) => <tr key={index}>
+            <td>{sample.plateLabel || "Unassigned"} / {sample.well || "—"}</td>
+            <td><input className="field-input min-w-40" aria-label={`DNA name ${sample.plateLabel} ${sample.well}`} value={sample.sampleName} maxLength={100} onChange={e => update("samples", draft.samples.map((s, i) => i === index ? { ...s, sampleName: e.target.value } : s))} onPaste={e => {
+              const text = e.clipboardData.getData("text").replace(/\r\n?/g, "\n");
+              if (!text.includes("\n") && !text.includes("\t")) return;
+              e.preventDefault();
+              const names = text.replace(/\n$/, "").split("\n");
+              if (names.some(name => name.includes("\t") || !name.trim() || name.trim().length > 100)) { showErrors(["Paste one column of non-empty DNA names, up to 100 characters each."]); return; }
+              const targets = draft.samples.slice(index, index + names.length);
+              if (targets.length !== names.length || targets.some(s => s.plateLabel !== sample.plateLabel)) { showErrors(["The pasted names exceed the remaining wells of this plate. Check the starting cell and well order."]); return; }
+              update("samples", draft.samples.map((s, i) => i >= index && i < index + names.length ? { ...s, sampleName: names[i - index].trim() } : s)); setErrors([]);
+            }} /></td>
+            <td><input className="field-input min-w-40" aria-label={`First primer ${sample.plateLabel} ${sample.well}`} value={sample.reactions[0].primerName} maxLength={100} onChange={e => update("samples", draft.samples.map((s, i) => i === index ? { ...s, reactions: s.reactions.map((r, j) => j === 0 ? { ...r, primerName: e.target.value } : r) } : s))} /></td>
+            <td>{sample.reactions.length}</td><td><button type="button" className="button-secondary" aria-expanded={expandedSample === index} onClick={() => setExpandedSample(expandedSample === index ? null : index)}>Details {sample.well}</button></td>
+          </tr>)}
+        </tbody></table>
+      </div>}
+      {draft.samples.map((sample, index) => draft.container === "Tubes" || expandedSample === index ? <SampleEditor key={index} sample={sample} number={index + 1} container={draft.container} mode={draft.submissionMode} canRemove={draft.samples.length > 1} canAddReaction={count < MAX_REACTIONS} onRemove={() => { update("samples", draft.samples.filter((_, i) => i !== index)); setExpandedSample(null); }} onChange={(value) => update("samples", draft.samples.map((s, i) => i === index ? value : s))} /> : null)}
       <div className="flex flex-wrap gap-3 border-t border-slate-200 bg-slate-50 p-5">
         <button type="button" className="button-secondary" disabled={count >= MAX_REACTIONS} onClick={addSample}><Plus className="h-4 w-4" />Add physical sample</button>
         <button type="button" className="button-secondary" disabled={draft.samples.length < 2} onClick={() => update("samples", draft.samples.map((sample) => ({ ...sample, templateType: draft.samples[0].templateType, preparation: draft.samples[0].preparation })))}>Apply sample 1 template and preparation to all</button>

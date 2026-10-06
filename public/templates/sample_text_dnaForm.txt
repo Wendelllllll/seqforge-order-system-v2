@@ -1,0 +1,3 @@
+#	wellID	Tube label	DNA Name	DNA Type	Template Length (bp)	Conc. (ng/uL)	My primers	Conc. (pmol/uL)	SeqForge Primers	Special protocol
+1	A1	44	5dna	Plasmid	87	77	primer2	5	AOX1-Rev	None Known
+2	B1	44	5dna	Plasmid	87	77	primer2	5	AOX1-Rev	None Known

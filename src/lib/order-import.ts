@@ -1,3 +1,4 @@
+import { convertLegacyRows, isLegacyHeader, type LegacyPrimerChoice } from "./legacy-order-import";
 import { blankReaction, blankSample, MAX_IMPORT_BYTES, MAX_REACTIONS, orderSchema, sampleSchema, type OrderDraft, type SampleDraft } from "./order-intake";
 
 export const SAMPLE_COLUMNS = ["sampleKey", "sampleName", "tubeLabel", "plateLabel", "well", "templateType", "templateLength", "concentration", "preparation", "notes"] as const;
@@ -37,12 +38,20 @@ export function readDelimited(input: string): { cells: string[]; line: number }[
   return rows;
 }
 
-export function importSamples(text: string, order: Omit<OrderDraft, "samples">): { samples: SampleDraft[]; errors: string[] } {
+export function importSamples(text: string, order: Omit<OrderDraft, "samples">, legacyPrimerChoice: LegacyPrimerChoice = "require-single"): { samples: SampleDraft[]; errors: string[] } {
   const fail = (errors: string[]) => ({ samples: [], errors });
   if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES) return fail(["The import is larger than 1 MB."]);
   let rows: ReturnType<typeof readDelimited>;
   try { rows = readDelimited(text); } catch (error) { return fail([error instanceof Error ? error.message : "Unable to read this file."]); }
   if (rows.length < 2) return fail(["Include a header row and at least one reaction row."]);
+  if (isLegacyHeader(rows[0].cells)) {
+    const legacy = convertLegacyRows(rows, order, legacyPrimerChoice);
+    if (legacy.errors.length) return fail(legacy.errors);
+    rows = [
+      { cells: [...IMPORT_COLUMNS], line: rows[0].line },
+      ...legacy.mapped.map(({ sample, line }) => ({ line, cells: IMPORT_COLUMNS.map(key => String(({ ...sample, ...sample.reactions[0] } as Record<string, unknown>)[key])) })),
+    ];
+  }
   const [header, ...data] = rows;
   if (data.length > MAX_REACTIONS) return fail([`This demo supports at most ${MAX_REACTIONS} reactions per order.`]);
   const required = ["sampleKey", "sampleName", "templateType", "primerSource", "primerName", ...(order.container === "Plate" ? ["plateLabel", "well"] : ["tubeLabel"])];
