@@ -4,6 +4,10 @@ The SeqForge public website and the existing order system now share one Next.js 
 
 ## Public website
 
+The October 13 frontend refresh synchronizes the approved homepage and service pages, including interactive result previews, service comparisons, Nippo headings, laboratory-coat mascots, and the shared looping sample-packing animation. The temporary preparation checklist is removed; service and result-navigation icons remain.
+
+Service-page sample planners are local preparation previews, not submitted orders. The header's Start Your Order links to the existing `/orders/new` portal; Log in continues to use the existing authenticated application. Molecular and Nanopore planning still requires team confirmation. Contact remains a preview form. All site assets use `/brand/` paths to work with the existing Next.js rewrites.
+
 The approved navy and mint frontend lives in `public/brand`. Next.js rewrites serve the homepage, About, Contact, and Molecular, Sanger, and Nanopore service pages at their public URLs. These pages retain their WebGL hero and connected laboratory interactions. Public navigation uses full document links so its styles and animation lifecycle remain isolated from the React portal.
 
 ## Account and ordering

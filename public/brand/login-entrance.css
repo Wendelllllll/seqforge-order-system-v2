@@ -1,0 +1,30 @@
+.login-page{background:#eef2ef}
+.utility-page.login-page .login-layout{width:100%;max-width:none;min-height:calc(100svh - 140px);margin:0;gap:0;display:grid;grid-template-columns:58% 42%;align-items:stretch;overflow:hidden}
+.utility-page.login-page .login-intro{padding:64px 7vw 0 6vw;background:transparent;position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column}
+.login-intro>.sf-mesh-canvas,.login-intro.sf-mesh-surface:before{display:none}
+.utility-page.login-page .login-intro>.eyebrow{font-size:11px;color:#00796f;letter-spacing:.14em;margin:0 0 22px}
+.utility-page.login-page .login-intro h1{font-size:clamp(48px,5.5vw,82px)!important;line-height:1.04;letter-spacing:-.055em;color:#112f53;margin:0 0 24px;font-weight:500}
+.utility-page.login-page .login-intro>p:not(.eyebrow){font-size:16px;line-height:1.6;color:#4e6b66;margin:0;max-width:400px}
+.portal-art{margin:25px -7vw 0 -2vw;position:relative;flex:1;min-height:280px;display:flex;flex-direction:column;justify-content:end}
+.portal-fold{transition:transform .65s cubic-bezier(.2,.7,.2,1);overflow:hidden;min-height:260px}
+.portal-fold svg{width:100%;height:auto;max-height:330px;display:block;overflow:hidden}
+.portal-caption{position:absolute;bottom:10px;left:2vw;right:25px;display:flex;align-items:center;justify-content:space-between;font:9px Arial,sans-serif;letter-spacing:.1em;color:#173b4e;gap:15px}
+.portal-replay{border:0;background:#eef2efeb;color:#143b4c;font:12px Arial,sans-serif;padding:9px 13px;cursor:pointer;border-radius:0}.portal-replay:hover{background:#143b4c;color:#fff}.portal-replay:focus-visible{outline:2px solid #008879;outline-offset:3px}
+.utility-page.login-page .login-form{align-self:center;border:0;border-left:1px solid #c7d6ce;border-radius:0;box-shadow:none;background:transparent;padding:20px 5vw;margin:45px 0;gap:19px}
+.utility-page.login-page .login-form h2{font-size:36px!important;line-height:1.15;letter-spacing:-.03em;margin:0 0 10px}
+.login-form .eyebrow{font-size:10px;letter-spacing:.1em;margin:0}.login-form .form-notice{margin:0;background:#e3eae4;font-size:11px;padding:11px;line-height:1.6}.login-form .login-help{font-size:12px;line-height:1.6;margin:0}.login-form .form-status:empty{display:none}
+.utility-page.login-page .login-form input{background:#f8faf7;border:1px solid #b8cac1;border-radius:3px;font-size:15px;padding:14px}
+.login-page .login-form input:focus{outline:2px solid #008d7d;outline-offset:2px;background:#fff}
+.utility-page.login-page .login-form>.button{border-radius:3px;background:#112f53;border-color:#112f53;color:#fff;font-size:15px;padding:16px}.utility-page.login-page .login-form>.button:hover{background:#007e71;border-color:#007e71}
+@media(max-width:760px){.utility-page.login-page .login-layout{grid-template-columns:1fr}.utility-page.login-page .login-intro{padding:35px 6% 0}.utility-page.login-page .login-intro h1{font-size:46px!important}.portal-art{min-height:180px;margin:15px -7vw 0 -4vw}.portal-fold{min-height:180px}.portal-fold svg{height:210px;max-height:210px}.portal-caption{display:none}.utility-page.login-page .login-form{border-left:0;border-top:1px solid #c7d6ce;margin:0;padding:34px 6% 45px}.utility-page.login-page .login-form h2{font-size:32px!important}.utility-page.login-page .login-intro>p:not(.eyebrow){font-size:14px}}
+@media(prefers-reduced-motion:reduce){.portal-fold{transition:none;transform:none!important}}
+/* Keep the whole ribbon next to the introduction, independently of screen height. */
+.utility-page.login-page .login-layout{align-items:start;min-height:0;padding-bottom:30px}
+.utility-page.login-page .login-intro{padding-top:42px}
+.portal-art{flex:0 0 auto;justify-content:flex-start;margin-top:12px;min-height:0}
+.portal-fold{min-height:0}
+.portal-fold svg{height:auto;max-height:none;aspect-ratio:700/440}
+.portal-caption{position:relative;left:auto;right:auto;bottom:auto;margin:0 25px 0 2vw}
+.utility-page.login-page .login-form{align-self:start;margin:42px 0 20px}
+@media(min-width:1500px){.utility-page.login-page .login-layout{max-width:1600px;margin:0 auto}.portal-art{margin-right:-3vw}.portal-fold svg{max-height:400px}}
+@media(max-width:760px){.utility-page.login-page .login-intro{padding-top:30px}.portal-fold svg{height:auto;max-height:none}.utility-page.login-page .login-form{margin:15px 0 0}.portal-caption{display:flex;margin:0 6vw;font-size:8px}.portal-art{margin-top:8px}}

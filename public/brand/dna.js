@@ -58,7 +58,7 @@
     const light=paused||reduced.matches?(scrollY>hero.offsetHeight*.7?1:0):Math.min(1,p*1.35);
     header.style.setProperty('--frame-light',light.toFixed(3));header.style.setProperty('--frame-ink',light>.35?'1':'0');header.classList.toggle('header-on-light',light>.72);
   }
-  function easeScroll(t){scrollFrame=0;const dt=Math.min(48,t-lastScrollTime||16);lastScrollTime=t;current+=(target-current)*(1-Math.exp(-dt/135));if(Math.abs(target-current)<.001)current=target;paintFrame();if(current!==target)scrollFrame=requestAnimationFrame(easeScroll)}
+  function easeScroll(t){scrollFrame=0;const dt=Math.min(48,t-lastScrollTime||16);lastScrollTime=t;current=document.documentElement.classList.contains("sf-smooth")?target:current+(target-current)*(1-Math.exp(-dt/70));if(Math.abs(target-current)<.001)current=target;paintFrame();if(current!==target)scrollFrame=requestAnimationFrame(easeScroll)}
   function updateScroll(){const distance=Math.max(1,track.offsetHeight-pin.offsetHeight),top=track.getBoundingClientRect().top;
     target=paused||reduced.matches?0:Math.min(1,Math.max(0,-top/distance));
     if(paused||reduced.matches){cancelAnimationFrame(scrollFrame);scrollFrame=0;current=0;paintFrame()}else if(!scrollFrame)scrollFrame=requestAnimationFrame(easeScroll);

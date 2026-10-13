@@ -1,0 +1,7 @@
+/* Retain the original homepage and prevent hero controls from overlapping on shorter desktop screens. */
+@media(min-width:761px){
+  .lab-home .dna-hero .hero-intro{top:20%}
+  .lab-home .dna-hero .hero-intro>.micro-label{margin-bottom:25px}
+  .lab-home .dna-hero .hero-intro h1{margin-bottom:20px}
+  .lab-home .dna-hero .hero-intro>p{margin-bottom:26px}
+}

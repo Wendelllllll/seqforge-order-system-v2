@@ -1,0 +1,72 @@
+/* A larger reading scale for service and utility pages. */
+body.site-page main {font-size:18px}
+body.site-page main h1,
+body.site-page :is(.cover-grid,.page-hero,.login-intro) h1 {
+  font-size:clamp(56px,6vw,84px);line-height:1.08;letter-spacing:-.025em;
+}
+body.site-page main h2,
+body.site-page :is(.prep-heading,.form-card,.order-panel,.related-section) h2 {
+  font-size:clamp(34px,3.8vw,52px);line-height:1.18;letter-spacing:-.025em;
+}
+body.site-page main h3,
+body.site-page :is(.benefit-row,.prep-steps,.pillar-grid) h3 {
+  font-size:clamp(23px,2.1vw,27px);line-height:1.35;
+}
+body.site-page main :is(p,li,dd,dt,address) {font-size:18px;line-height:1.75}
+body.site-page :is(.cover-intro,.page-hero .intro,.login-intro>p:not(.eyebrow)) {
+  font-size:21px;line-height:1.65;
+}
+body.site-page :is(.cover-grid,.page-hero,.login-intro) .eyebrow,
+body.site-page main :is(.eyebrow,.section-tag,.contact-label,.pillar-number) {
+  font-size:14px;line-height:1.5;letter-spacing:.6px;
+}
+body.site-page main :is(.sample-note,.table-note,.form-notice,.form-status,.lab-seal-hint) {
+  font-size:15px;line-height:1.65;
+}
+body.site-page main :is(.figure-caption,.figure-caption button,.figure-close,.text-link,.lab-seal-pause) {
+  font-size:16px;line-height:1.5;
+}
+body.site-page .lab-seal-caption p {font-size:17px}
+body.site-page .cover-grid {padding-top:64px;padding-bottom:56px;gap:48px}
+body.site-page .cover-grid>div {min-width:0}
+body.site-page .cover-intro {max-width:590px}
+body.site-page .intro-columns h2 {max-width:480px}
+body.site-page .page-nav>nav {font-size:16px;line-height:1.5}
+body.site-page .file-menu>button {font-size:20px;line-height:1.5}
+body.site-page .spec-table {font-size:18px;line-height:1.6}
+body.site-page .faq-section summary {font-size:20px;line-height:1.5;padding-block:25px}
+body.site-page .related-section a {font-size:20px;line-height:1.5}
+body.site-page main .button {font-size:17px;line-height:1.4;padding:16px 26px;min-height:54px}
+body.site-page main :is(input,select,textarea) {font-size:17px;line-height:1.5}
+body.site-page main :is(label,.form-card label,.ob-field label) {font-size:16px;line-height:1.5}
+body.site-page main .show-password {font-size:16px}
+body.site-page .order-panel>summary>span {font-size:16px}
+body.site-page .order-panel>summary strong {font-size:clamp(28px,3vw,40px);line-height:1.3}
+body.site-page .doc-sheet :is(table,p) {font-size:14px}
+body.site-page .site-top {font-size:13px}
+body.site-page .site-footer h3 {font-size:18px}
+body.site-page .site-footer :is(p,a:not(:has(img))) {font-size:16px;line-height:1.7}
+body.site-page .site-footer small {font-size:13px}
+
+@media(max-width:760px) {
+  body.site-page main h1,
+  body.site-page :is(.cover-grid,.page-hero,.login-intro) h1 {
+    font-size:clamp(44px,12.3vw,58px);line-height:1.1;
+  }
+  body.site-page main h2,
+  body.site-page :is(.prep-heading,.form-card,.order-panel,.related-section) h2 {
+    font-size:clamp(32px,8.7vw,40px);line-height:1.2;
+  }
+  body.site-page main h3,
+  body.site-page :is(.benefit-row,.prep-steps,.pillar-grid) h3 {font-size:23px}
+  body.site-page main :is(p,li,dd,dt,address) {font-size:17px;line-height:1.75}
+  body.site-page :is(.cover-intro,.page-hero .intro,.login-intro>p:not(.eyebrow)) {font-size:19px;line-height:1.65}
+  body.site-page .cover-grid {padding-top:44px;padding-bottom:38px;gap:24px}
+  body.site-page .page-nav>nav {font-size:15px}
+  body.site-page .file-menu>button {font-size:18px}
+  body.site-page .spec-table {font-size:16px}
+  body.site-page .faq-section summary {font-size:18px}
+  body.site-page .related-section a {font-size:18px}
+  body.site-page .site-top {flex-wrap:wrap;gap:4px 16px;font-size:12px}
+  body.site-page .site-top>a {font-size:12px}
+}

@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+/* One navigation system for the homepage and every service/utility page. */
+:is(.lab-home,.site-page)>header {
+  height:100px;padding:0 4%;gap:25px;
+  font-family:'DM Sans',Arial,sans-serif;font-size:16px;font-weight:400;
+  line-height:normal;letter-spacing:normal;
+}
+:is(.lab-home,.site-page)>header>a:first-child {flex-shrink:0}
+:is(.lab-home,.site-page)>header .logo {width:230px;height:auto;padding:0;border-radius:0;background:none}
+:is(.lab-home,.site-page)>header>nav {
+  display:flex;align-items:center;gap:27px;margin:auto;padding:0;
+  font-size:17px;font-weight:600;line-height:normal;letter-spacing:normal;
+}
+:is(.lab-home,.site-page)>header nav>a {padding:0}
+:is(.lab-home,.site-page)>header .services-toggle {
+  display:flex;align-items:center;gap:8px;padding:18px 0;
+  border:0;background:none;font:inherit;font-weight:600;cursor:pointer;
+}
+:is(.lab-home,.site-page)>header .login-link {font-size:16px;font-weight:700}
+:is(.lab-home,.site-page)>header>nav>a,
+:is(.lab-home,.site-page)>header .services-toggle,
+:is(.lab-home,.site-page)>header .login-link {
+  position:relative;white-space:nowrap;text-decoration:none;transition:color .3s ease;
+}
+:is(.lab-home,.site-page)>header>nav>a::after,
+:is(.lab-home,.site-page)>header .services-toggle::after,
+:is(.lab-home,.site-page)>header .login-link::after {
+  content:'';position:absolute;left:0;right:0;bottom:-9px;height:2px;
+  background:#62e7cc;transform:scaleX(0);transform-origin:left;transition:transform .28s;
+}
+:is(.lab-home,.site-page)>header .services-toggle::after {bottom:8px}
+:is(.lab-home,.site-page)>header>nav>a:is(:hover,:focus-visible)::after,
+:is(.lab-home,.site-page)>header .services-toggle:is(:hover,:focus-visible,[aria-expanded=true])::after,
+:is(.lab-home,.site-page)>header .login-link:is(:hover,:focus-visible)::after {transform:scaleX(1)}
+:is(.lab-home,.site-page)>header .nav-dropdown {position:relative}
+:is(.lab-home,.site-page)>header .dropdown-panel {
+  display:none;position:absolute;top:100%;left:-22px;min-width:285px;padding:12px;
+  margin:0;gap:3px;background:#f0fff9;border:1px solid #98d9c5;border-radius:10px;
+  box-shadow:0 20px 50px #0005;visibility:hidden;opacity:0;pointer-events:none;transform:none;
+}
+:is(.lab-home,.site-page)>header .nav-dropdown.expanded .dropdown-panel {
+  display:grid;visibility:visible;opacity:1;pointer-events:auto;
+}
+:is(.lab-home,.site-page)>header .dropdown-panel a {
+  padding:16px;border-radius:5px;white-space:nowrap;color:#112d57;
+  font-family:inherit;font-size:16px;font-weight:600;line-height:normal;letter-spacing:normal;
+  text-decoration:none;transition:background .2s,transform .2s;
+}
+:is(.lab-home,.site-page)>header .dropdown-panel a:is(:hover,:focus-visible) {background:#e0f4e9;color:#112d57;transform:translateX(3px)}
+:is(.lab-home,.site-page)>header>.button {
+  display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;gap:normal;
+  font-family:inherit;font-size:16px;font-weight:600;line-height:normal;letter-spacing:normal;
+  padding:15px 21px;border:1px solid #99e6d2;border-radius:5px;background:#c9eee2;color:#112d57;
+  box-shadow:0 0 0 transparent;text-decoration:none;
+  transition:background .25s,box-shadow .25s,transform .25s;
+}
+:is(.lab-home,.site-page)>header>.button:is(:hover,:focus-visible) {
+  background:#e9fff7;box-shadow:0 5px 24px #62e7cc2e;transform:translateY(-2px);
+}
+:is(.lab-home,.site-page)>header .menu {display:none;font-family:inherit;font-weight:400;line-height:normal;letter-spacing:normal}
+
+/* The light header uses the same navy and mint as the homepage's light state. */
+.site-page>.site-header {color:#112d57}
+.site-page>.site-header :is(.services-toggle,.login-link,.menu),
+.site-page>.site-header>nav>a {color:#112d57}
+.site-page>.site-header :is(.services-toggle,.login-link):is(:hover,:focus-visible),
+.site-page>.site-header>nav>a:is(:hover,:focus-visible) {color:#00867d}
+.site-page>.site-header .logo {mix-blend-mode:multiply;transition:filter .3s,transform .3s}
+.site-page>.site-header>a:first-child:hover .logo {filter:drop-shadow(0 0 12px #52e5c440);transform:translateY(-1px)}
+.site-page {--global-nav-height:100px}
+.site-page .page-nav {top:var(--global-nav-height)}
+html:has(>body.site-page) {scroll-padding-top:180px}
+
+@media(max-width:1200px) {
+  :is(.lab-home,.site-page)>header {gap:19px}
+  :is(.lab-home,.site-page)>header .logo {width:205px}
+  :is(.lab-home,.site-page)>header>nav {gap:19px;font-size:16px}
+  :is(.lab-home,.site-page)>header>.button {font-size:15px;padding:14px 17px}
+}
+@media(min-width:761px) and (max-width:1100px) {
+  :is(.lab-home,.site-page)>header {height:88px}
+  :is(.lab-home,.site-page)>header .menu {display:block;order:3;background:none;border:1px solid #86cbb45c;border-radius:6px;padding:11px 15px;font-size:16px;margin:0}
+  :is(.lab-home,.site-page)>header .login-link {margin-left:auto}
+  :is(.lab-home,.site-page)>header>nav {display:none;position:absolute;top:88px;left:0;right:0;margin:0;padding:24px 5%;max-height:calc(100svh - 88px);overflow:auto}
+  :is(.lab-home,.site-page)>header>nav.open {display:flex;align-items:start;flex-direction:column;gap:22px}
+  :is(.lab-home,.site-page)>header>nav>a {padding:8px 0}
+  :is(.lab-home,.site-page)>header .nav-dropdown {width:100%}
+  :is(.lab-home,.site-page)>header .services-toggle {width:100%;justify-content:space-between}
+  :is(.lab-home,.site-page)>header .dropdown-panel {position:static;margin-top:4px;box-shadow:none}
+  .site-page {--global-nav-height:88px}
+  .site-page>.site-header>nav {background:#fbfcf6}
+}
+@media(max-width:760px) {
+  :is(.lab-home,.site-page)>header {height:82px;padding:0 6%;gap:14px}
+  :is(.lab-home,.site-page)>header .logo {width:174px}
+  :is(.lab-home,.site-page)>header .menu {display:block;order:3;background:none;border:0;border-radius:0;font-size:14px;padding:10px 0;margin:0}
+  :is(.lab-home,.site-page)>header .login-link {display:block;font-size:14px;margin-left:auto}
+  :is(.lab-home,.site-page)>header>.button {display:none}
+  :is(.lab-home,.site-page)>header>nav {display:none;position:absolute;top:82px;left:0;right:0;margin:0;padding:20px 6%;font-size:18px;max-height:calc(100svh - 82px);overflow:auto}
+  :is(.lab-home,.site-page)>header>nav.open {display:flex;flex-direction:column;align-items:start;gap:19px}
+  :is(.lab-home,.site-page)>header>nav>a {font-size:17px;padding:10px 0}
+  :is(.lab-home,.site-page)>header>nav>a::after {bottom:0}
+  :is(.lab-home,.site-page)>header .nav-dropdown {width:100%}
+  :is(.lab-home,.site-page)>header .services-toggle {font-size:17px;width:100%;justify-content:space-between}
+  :is(.lab-home,.site-page)>header .dropdown-panel {position:static;margin:0 0 12px;border-radius:0;box-shadow:none;min-width:0}
+  .site-page {--global-nav-height:82px}
+  .site-page>.site-header>nav {background:#fbfcf6}
+  html:has(>body.site-page) {scroll-padding-top:160px}
+}
+@media(prefers-reduced-motion:reduce) {
+  :is(.lab-home,.site-page)>header * {transition:none!important}
+  :is(.lab-home,.site-page)>header :is(a,button):hover {transform:none}
+}

@@ -1,0 +1,22 @@
+(() => {
+  const services={
+    plasmid:{title:'Plasmids or PCR Products',label:'YOUR TEMPLATE, YOUR FORMAT',copy:'Choose whether to submit your template and primer together or separately.',url:'plasmids-or-pcr-products'},
+    difficult:{title:'Difficult Templates',label:'SUPPORT FOR CHALLENGING SEQUENCES',copy:'GC-rich templates, difficult repeats, hairpins, secondary structures, and long homopolymers can require a different approach. Our proprietary sequencing reactions may improve results and help avoid repeats. Select the difficult template workflow and discuss your sample with our team.',url:'sequencing-difficult-templates'},
+    purification:{title:'PCR Purification',label:'A CLEANER START',copy:'SeqForge uses enzymatic PCR cleanup to remove unincorporated primers and dNTPs, helping ensure good-quality templates are available for your sequencing reactions.',url:'pcrpurification'},
+    clinical:{title:'Clinical Sequencing',label:'CLIA/CAP-REGULATED WORKFLOWS',copy:'CLIA/CAP-regulated workflows are available to support clinical workflows and reporting of Sanger sequencing results. Contact our team to confirm the appropriate workflow and submission requirements for your application.',url:'clinicalsequencing'},
+    rrna:{title:'16S rRNA Sequencing',label:'EXPLORE YOUR APPLICATION',copy:'Discuss your 16S rRNA sequencing project with our team. Contact us for application-specific sample requirements, available scope, and turnaround.',url:'16s-rrna-gene-sequencing'}
+  };
+  let selected='plasmid',step=0;
+  const format=document.getElementById('sg-format');
+  function updateFormat(){const value=document.querySelector('[name=format]:checked').value;document.getElementById('sg-format-note').textContent=value==='Pre-mixed'?'Provide your template and primer pre-mixed in a single well or tube according to the sample submission guidelines.':'Send your template and primer separately. Provide your own primer or choose a universal primer free of charge. Follow the sample submission guidelines.';if(document.getElementById('sg-order-format'))document.getElementById('sg-order-format').textContent=selected==='plasmid'?'Submission: '+value:'Confirm sample requirements with our team.';}
+  document.querySelectorAll('[data-sg]').forEach(button=>button.addEventListener('click',()=>{
+    selected=button.dataset.sg;const service=services[selected];
+    document.querySelectorAll('[data-sg]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+    const text=document.getElementById('sg-service-text');text.querySelector('.mol-label').textContent=service.label;text.querySelector('h3').textContent=service.title;text.querySelector('p:last-child').textContent=service.copy;
+    format.hidden=selected!=='plasmid';document.getElementById('sg-service-link').href='https://seqforge.com/'+service.url+'/';document.dispatchEvent(new CustomEvent('sanger-detail-selected',{detail:{key:selected,title:service.title}}));updateFormat();
+  }));
+  document.querySelectorAll('[name=format]').forEach(r=>r.addEventListener('change',updateFormat));
+  const steps=[['PREPARE','Template Purification','Prepare a suitable template for sequencing. PCR cleanup removes unincorporated primers and dNTPs when required.'],['SEQUENCE','Sanger Sequencing Reaction','The prepared template and primer enter the sequencing reaction. Difficult templates may use a specialized reaction workflow.'],['CLEAN UP','Sequencing Cleanup','The sequencing reaction is cleaned up before capillary electrophoresis.'],['SEPARATE','Capillary Electrophoresis','Reaction products are separated on the ABI 3730xl platform, using advanced polymers and a 96-capillary array.'],['REVIEW','Data Analysis','The sequencing signal is analyzed to produce sequence data for review. Our technical team can help you discuss your results.']];
+  function showStep(i){step=i;document.querySelectorAll('[data-step]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.step)===i)));document.getElementById('sg-step-number').textContent='0'+(i+1)+' / '+steps[i][0];document.getElementById('sg-step-title').textContent=steps[i][1];document.getElementById('sg-step-copy').textContent=steps[i][2];document.querySelector('.sg-next').textContent=i===4?'Back to the first step':'Next step';}
+  document.querySelectorAll('[data-step]').forEach(b=>b.addEventListener('click',()=>showStep(Number(b.dataset.step))));document.querySelector('.sg-next').addEventListener('click',()=>showStep((step+1)%5));
+})();

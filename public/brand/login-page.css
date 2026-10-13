@@ -1,0 +1,9 @@
+.utility-page.login-page .login-layout{width:88%;max-width:1150px;margin:60px auto 80px;padding:0;display:grid;grid-template-columns:1fr 1fr;align-items:start;gap:8%}
+.utility-page.login-page .login-intro{padding:25px 0;background:transparent}
+.utility-page.login-page .login-intro h1{font-size:clamp(42px,4.4vw,68px)!important;line-height:1.08;color:#112f53;letter-spacing:-.04em;margin:22px 0}
+.utility-page.login-page .login-intro>p:not(.eyebrow){font-size:17px;line-height:1.7;color:#54746c}
+.utility-page.login-page .login-form{background:transparent;border:0;border-left:1px solid #cfddd4;border-radius:0;box-shadow:none;padding:20px 0 20px 40px;gap:18px}
+.utility-page.login-page .login-form h2{font-size:36px!important;line-height:1.15;margin:0 0 12px}
+.login-form .eyebrow,.login-form .form-notice,.login-form .login-help{margin:0}.login-form .form-status:empty{display:none}
+.utility-page.login-page .login-form>.button{background:#112f53;border-color:#112f53;border-radius:4px}.utility-page.login-page .login-form>.button:hover{background:#007e71;border-color:#007e71}
+@media(max-width:760px){.utility-page.login-page .login-layout{grid-template-columns:1fr;gap:24px;margin:28px auto 45px}.utility-page.login-page .login-intro{padding:0}.utility-page.login-page .login-intro h1{font-size:42px!important}.utility-page.login-page .login-form{border-left:0;border-top:1px solid #cfddd4;padding:28px 0 0}}

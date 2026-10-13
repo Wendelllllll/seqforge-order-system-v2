@@ -1,0 +1,5 @@
+html.sf-smooth,html.sf-smooth body{scroll-behavior:auto!important}
+/* A single short reveal lets visitors read without waiting for an animation. */
+.scroll-reveal{transition-duration:.48s!important;transition-timing-function:cubic-bezier(.22,.61,.36,1)!important}
+.sf-mesh-canvas{contain:strict}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}}
