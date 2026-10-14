@@ -1,0 +1,10 @@
+.site-page .file-previews,.site-page .fx-view,.site-page .fx-panel { position:relative; }
+.site-page .report-particles { position:absolute; inset:0; z-index:8; pointer-events:none; border:0; background:transparent; }
+.site-page .report-transitioning { isolation:isolate; }
+.site-page .file-previews { min-height:480px; }
+.site-page .file-previews .file-figure { min-height:340px; }
+.site-page .file-menu>button { transition:color .2s,transform .2s; }
+.site-page .file-menu>button:hover { transform:translateX(4px); }
+.site-page .file-menu>button[aria-selected=true] { border-left:3px solid #007d6e; padding-left:16px; }
+@media(max-width:760px){.site-page .file-previews{min-height:465px}.site-page .file-previews .file-figure{min-height:285px}}
+@media(prefers-reduced-motion:reduce){.site-page .report-particles{display:none}.site-page .file-menu>button{transition:none}}

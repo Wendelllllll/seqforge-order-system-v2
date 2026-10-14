@@ -1,0 +1,15 @@
+(() => {
+ const intro=document.querySelector('.login-intro');if(!intro)return;
+ const reduced=matchMedia('(prefers-reduced-motion:reduce)');intro.querySelector('.login-brand')?.remove();
+ const art=document.createElement('div');art.className='portal-art';art.innerHTML=`<div class="portal-fold" aria-hidden="true"><svg viewBox="0 0 700 440" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="foldMint"><stop stop-color="#a4f3d7"/><stop offset="1" stop-color="#47d8b7"/></linearGradient><linearGradient id="foldTeal"><stop stop-color="#17bba3"/><stop offset="1" stop-color="#00887f"/></linearGradient><linearGradient id="foldDeep"><stop stop-color="#005f69"/><stop offset="1" stop-color="#009e91"/></linearGradient><linearGradient id="foldLight"><stop stop-color="#64dfc0"/><stop offset="1" stop-color="#00ac9d"/></linearGradient></defs><g class="fold-surfaces">${['foldMint','foldTeal','foldDeep','foldLight'].map(id=>`<polygon fill="url(#${id})"/>`).join('')}</g></svg></div><div class="portal-caption"><span>SEQFORGE / CUSTOMER WORKSPACE</span><button type="button" class="portal-replay" aria-label="Replay entrance animation">Replay ↗</button></div>`;intro.append(art);
+ const svg=art.querySelector('svg'),ns='http://www.w3.org/2000/svg';const letters=[...'ATCG'].map(letter=>{const el=document.createElementNS(ns,'text');el.textContent=letter;el.setAttribute('x','77');el.setAttribute('y','185');el.setAttribute('text-anchor','middle');el.setAttribute('fill','#effff7');el.setAttribute('font-family','Arial,sans-serif');el.setAttribute('font-size','150');svg.append(el);return el;});
+ const faces=[...art.querySelectorAll('polygon')],fold=art.querySelector('.portal-fold');let frame=0,start=0;
+ const ease=t=>1-Math.pow(1-t,4),clamp=t=>Math.max(0,Math.min(1,t));
+ function draw(progress){const points=[[28,18]];for(let i=1;i<=4;i++){const a=ease(progress),x=points[i-1][0]+8+147*a,y=points[i-1][1]+[0,0,95,-95,0][i]*a;points.push([x,y]);}faces.forEach((face,i)=>{const [x,y]=points[i],[u,v]=points[i+1];letters[i].setAttribute('transform',`matrix(${(u-x)/155} ${(v-y)/155} 0 1 ${x} ${y})`);face.setAttribute('points',`${x},${y} ${u},${v} ${u},${v+275} ${x},${y+275}`);});}
+ function tick(now){const p=clamp((now-start)/1650);draw(p);if(p<1)frame=requestAnimationFrame(tick);else frame=0;}
+ function play(){cancelAnimationFrame(frame);if(reduced.matches){draw(1);return;}start=performance.now();draw(0);frame=requestAnimationFrame(tick);}
+ let first=true;try{first=sessionStorage.getItem('seqforge-login-atcg-v3')!=='seen';sessionStorage.setItem('seqforge-login-atcg-v3','seen');}catch{}
+ if(first)play();else draw(1);art.querySelector('button').addEventListener('click',play);
+ art.addEventListener('pointermove',e=>{if(reduced.matches||e.pointerType!=='mouse')return;const r=art.getBoundingClientRect();fold.style.transform=`translateX(${((e.clientX-r.left)/r.width-.5)*14}px)`;});art.addEventListener('pointerleave',()=>fold.style.transform='none');
+ reduced.addEventListener('change',()=>{cancelAnimationFrame(frame);draw(1);fold.style.transform='none';});addEventListener('pagehide',()=>cancelAnimationFrame(frame));
+})();

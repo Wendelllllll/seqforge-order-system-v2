@@ -1,0 +1,39 @@
+/* Original interactive scenes, integrated with the current homepage layout. */
+.restored-home{background:#fbfcf6}
+.restored-home .site-header{position:fixed;inset:0 0 auto;width:100%;height:88px;color:#ecfffb;--frame-light:0;background:linear-gradient(180deg,rgba(4,23,44,calc(.94 * (1 - var(--frame-light)))),rgba(4,23,44,calc(.55 * (1 - var(--frame-light))))),rgba(255,255,255,var(--frame-light));border-color:transparent;box-shadow:none;backdrop-filter:blur(12px)}
+.restored-home .site-header .logo{filter:url(#brand-on-dark);mix-blend-mode:normal;width:220px}
+.restored-home .site-header>nav{font-size:16px;gap:25px}
+.restored-home .site-header .login-link{font-size:15px}
+.restored-home .site-header .services-toggle{color:inherit}
+.restored-home .site-header .dropdown-panel{color:#163d4d}
+.restored-home .site-header>.button{background:#e6fff7;color:#112d57;border-color:#d5f9ed}
+.restored-home .site-header a:hover{color:#78e8cf}
+.restored-home .site-header.header-on-light{color:#112d57;border-color:#173e5820}
+.restored-home .site-header.header-on-light .logo{filter:none;mix-blend-mode:multiply}
+.restored-home .site-header.header-on-light>.button{background:#008775;color:#fff;border-color:#008775}
+.restored-home .site-header.header-on-light a:hover,.restored-home .site-header .dropdown-panel a:hover{color:#007d6e}
+.restored-home .lab-hero{position:relative;color:#fff;isolation:isolate;overflow:hidden}
+.restored-home .hero-intro{position:absolute;text-shadow:0 2px 25px #102e4660}
+.restored-home .micro-label{display:block;font-size:11px;font-weight:500;letter-spacing:1.8px;line-height:1.5;margin:0 0 20px}
+.restored-home .hero-actions{display:flex}
+.restored-home .lab-button{display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;font:500 16px Arial,Helvetica,sans-serif;white-space:nowrap;transition:background .2s,transform .2s}
+.restored-home .lab-button.mint{color:#102e46}
+.restored-home .lab-button.glass{color:#fff;backdrop-filter:blur(8px)}
+.restored-home .lab-button:hover{transform:translateY(-3px)}
+.restored-home .lab-button.mint:hover{background:#c9eee2}
+.restored-home .lab-button.glass:hover{background:#76dfc626}
+.restored-home .scene-motion{background:#0b263e80;border:1px solid #a3ccbd60;color:#d7eee5;border-radius:30px;padding:9px 13px;font-size:12px;letter-spacing:.2px;backdrop-filter:blur(8px)}
+.restored-home .dna-hero .hero-intro>.micro-label{font-size:12px;letter-spacing:2.5px}
+.restored-home .dna-hero .hero-intro>p{color:#dbf1f4}
+.restored-home .dna-service-links b{font-size:13px}.restored-home .dna-service-links small{font-size:11px;letter-spacing:1px}
+.restored-home .dna-bottom{font-size:11px;letter-spacing:1.3px}.restored-home .dna-bottom>a,.restored-home .dna-bottom .scene-motion{font-size:12px}
+.restored-home .seal-chapter{padding-top:48px;background:var(--site-paper)}
+.restored-home .seal-chapter-heading h2{font-size:clamp(25px,2.7vw,38px);margin:0}
+.restored-home .seal-card-copy h3{font-size:23px;line-height:1.3;margin:0 0 9px}
+.restored-home .seal-card-copy p{font-size:16px;line-height:1.65}
+@media(min-width:761px){.restored-home .dna-hero .hero-intro{top:20%}.restored-home .dna-hero .hero-intro>.micro-label{margin-bottom:25px}.restored-home .dna-hero .hero-intro h1{margin-bottom:20px}.restored-home .dna-hero .hero-intro>p{margin-bottom:26px}}
+.restored-home.motion-paused .hero-intro{animation:none;opacity:1;transform:none}
+@keyframes hero-copy-in{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:1050px){.restored-home .site-header{height:80px}.restored-home .site-header .logo{width:170px}.restored-home .site-header>nav{gap:18px;font-size:13px}.restored-home .site-header .login-link{font-size:12px}}
+@media(max-width:760px){.restored-home .site-header{height:72px}.restored-home .site-header .logo{width:174px}.restored-home .site-header>nav{color:#163d4d;font-size:15px}.restored-home .site-header .menu{color:inherit}.restored-home .dna-hero .hero-intro>.micro-label{font-size:11px}.restored-home .dna-hero .lab-button{font-size:13px;padding:15px 14px;min-height:50px}.restored-home .dna-service-links b{font-size:11px}.restored-home .dna-service-links small{font-size:10px;letter-spacing:.3px}.restored-home .dna-bottom>span{display:none}.restored-home .dna-bottom>a{font-size:11px;letter-spacing:1px}.restored-home .dna-bottom .scene-motion{font-size:10px;white-space:nowrap;padding:10px 13px}.restored-home .seal-chapter{padding-top:30px}}
+@media(prefers-reduced-motion:reduce){.restored-home .hero-intro{animation:none}.restored-home .lab-button{transition:none}.restored-home .lab-button:hover{transform:none}}

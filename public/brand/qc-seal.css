@@ -1,0 +1,18 @@
+#prep .prep-heading{gap:40px;align-items:center}#prep .prep-heading>div:first-child{flex:1}
+#prep .qc-seal{position:relative;display:flex;flex-direction:column;align-items:center;width:350px;min-height:370px;flex:0 0 350px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:#163d4d;cursor:pointer;font-family:inherit;text-align:center;isolation:isolate}
+#prep .qc-seal:focus-visible{outline:2px solid #007d6e;outline-offset:7px}
+.qc-packing-art{display:block;width:320px;height:320px;background:url('/brand/assets/seal-packing-journey.png') no-repeat 0 0;background-size:400% 300%;flex:none}
+body.site-page main .qc-packing-caption{display:grid;gap:7px;width:100%;margin-top:-12px;min-height:54px}
+body.site-page main .qc-packing-caption b{font:600 11px/1.5 monospace;letter-spacing:.12em;color:#126155}
+body.site-page main .qc-packing-caption>span{font:13px/1.5 Arial,sans-serif;color:#4b6d65}
+.qc-packing-route{display:flex;justify-content:space-between;gap:14px;width:100%;max-width:300px;margin-top:12px;border-top:1px solid #adcbc0;padding-top:10px}
+body.site-page main .qc-packing-route i{position:relative;font:11px/1.4 Arial,sans-serif;font-style:normal;color:#82978e;transition:color .25s}
+.qc-packing-route i:before{content:'';position:absolute;top:-14px;left:calc(50% - 3px);width:6px;height:6px;border:1px solid #809f94;background:#edf3e8;border-radius:50%}
+body.site-page main .qc-packing-route i.is-done{color:#007d6e}.qc-packing-route i.is-done:before{background:#007d6e;border-color:#007d6e}
+body.site-page main .qc-replay{display:block;font:11px/1.5 Arial,sans-serif;color:#487366;margin-top:15px;text-decoration:underline;text-underline-offset:4px;opacity:.8}
+.qc-seal[data-phase=playing] .qc-replay{opacity:0}
+#prep .qc-cta-arrow{display:inline-block;transition:transform .3s}#prep.qc-complete .qc-cta-arrow{transform:translateX(4px)}#prep.qc-complete .prep-steps article>span{color:#007d6e}
+@media(max-width:760px){#prep .prep-heading{flex-direction:column;gap:20px}#prep .qc-seal{flex-basis:auto;width:320px;max-width:100%;align-self:center}.qc-packing-art{width:290px;height:290px}}
+@media(prefers-reduced-motion:reduce){#prep .qc-cta-arrow,.qc-packing-route i{transition:none}}
+.qc-packing-art svg{display:block;width:100%;height:100%;overflow:hidden}body.site-page main .qc-packing-caption{margin-top:10px} .qc-packing-art{height:290px}
+.qc-packing-art{position:relative;background:none}.qc-pack-layer{position:absolute;inset:0;display:block;will-change:opacity;pointer-events:none}.qc-pack-layer svg{display:block;width:100%;height:100%}body.site-page main .qc-replay{display:none!important}#prep .qc-seal{padding-bottom:10px}

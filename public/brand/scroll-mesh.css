@@ -1,0 +1,7 @@
+/* Color lives behind the content; native scrolling and existing hero stay intact. */
+.sf-mesh-surface{position:relative;isolation:isolate}
+.sf-mesh-surface:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 95% 35%,#00aa9828,transparent 58%),radial-gradient(ellipse at 0% 75%,#a8dcd547,transparent 48%);mask-image:linear-gradient(transparent,#000 15%,#000 85%,transparent)}
+.sf-mesh-surface.sf-mesh-ready:before{opacity:0}
+.sf-mesh-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;display:block;border:0;background:transparent}
+.sf-mesh-dark:before{background:radial-gradient(ellipse at 95% 35%,#00aa9855,transparent 58%),radial-gradient(ellipse at 0% 75%,#244e8155,transparent 48%)}
+@media(max-width:760px),(prefers-reduced-motion:reduce){.sf-mesh-canvas{display:none}.sf-mesh-surface.sf-mesh-ready:before{opacity:1}}
