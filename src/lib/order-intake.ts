@@ -61,7 +61,8 @@ export const sampleSchema = z.object({
 
 export const orderSchema = z.object({
   fulfillment: orderDefaultsSchema,
-  orderName: z.string().trim().min(1, "Order name is required.").max(120),
+  sharedResultEmails: z.array(z.string().trim().toLowerCase().email().max(254)).max(20).optional(),
+  orderName: z.string().trim().max(120).optional().transform(value => value || "Untitled order"),
   poNumber: z.string().trim().max(80),
   specialInstructions: z.string().trim().max(2000),
   priority: z.enum(PRIORITIES),

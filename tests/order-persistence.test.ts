@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import "dotenv/config";
 import { transferSqlite } from "../scripts/sqlite-transfer";
-import { createOrder, DuplicateOrderName, SubmissionConflict } from "../src/lib/create-order";
+import { createOrder, SubmissionConflict } from "../src/lib/create-order";
 import { blankOrder, blankReaction, orderSchema } from "../src/lib/order-intake";
 
 test("migration preserves legacy orders and new orders persist samples and reactions atomically", async () => {
@@ -46,6 +46,7 @@ test("migration preserves legacy orders and new orders persist samples and react
     assert.equal(legacy.result?.id, "r1"); assert.equal(legacy.statusHistory.length, 1);
     const draft = blankOrder();
   draft.fulfillment = { deliveryMethod: "Pickup", pickupLocation: "Demo institute, building A, room 101", pickupInstructions: "Reception", contactName: "Demo Scientist", contactPhone: "555-0100", piName: "Demo PI", billingOrganization: "Demo University", billingContactName: "Demo Finance", billingEmail: "finance@demo.local", billingAddress: "1 Demo Way, Demo City", paymentMethod: "Invoice" };
+    draft.sharedResultEmails = ["colleague@demo.local", "colleague@demo.local"];
     draft.orderName = "Plate sequencing";
     draft.container = "Plate";
     draft.priority = "Same day requested";
@@ -69,15 +70,18 @@ test("migration preserves legacy orders and new orders persist samples and react
     const retried = await Promise.all(Array.from({ length: 8 }, () => createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "Retried" }), key)));
     assert.equal(new Set(retried.map((o) => o.id)).size, 1);
     await assert.rejects(createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "Changed" }), key), SubmissionConflict);
-    await assert.rejects(createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "  PLATE   sequencing  " })), DuplicateOrderName);
-    await assert.rejects(createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "legacy" })), DuplicateOrderName);
+    await createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "  PLATE   sequencing  " }));
+    await createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "legacy" }));
     const raced = await Promise.allSettled(Array.from({ length: 8 }, () => createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "Same-name race" }))));
-    assert.equal(raced.filter((r) => r.status === "fulfilled").length, 1);
-    assert.equal(raced.filter((r) => r.status === "rejected" && r.reason instanceof DuplicateOrderName).length, 7);
+    assert.equal(raced.filter((r) => r.status === "fulfilled").length, 8);
+    assert.equal(raced.filter((r) => r.status === "rejected").length, 0);
+    const unnamed = await Promise.all(["", "   "].map(orderName => createOrder(db, "u1", orderSchema.parse({ ...draft, orderName }))));
+    assert.notEqual(unnamed[0].orderNumber, unnamed[1].orderNumber);
+    for (const order of unnamed) assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).orderName, "Untitled order");
     await db.user.create({ data: { id: "u2", email: "u2@demo.local", name: "Other", firstName: "Other", lastName: "User", organization: "Other", labName: "Other" } });
     await createOrder(db, "u2", orderSchema.parse(draft));
     await db.user.update({ where: { id: "u1" }, data: { orderDefaults: { ...draft.fulfillment, pickupLocation: "Changed" } } });
-    assert.deepEqual((await db.order.findUniqueOrThrow({ where: { id: created.id } })).fulfillmentSnapshot, draft.fulfillment);
+    assert.deepEqual((await db.order.findUniqueOrThrow({ where: { id: created.id } })).fulfillmentSnapshot, { ...draft.fulfillment, sharedResultEmails: ["colleague@demo.local"] });
     const second = await createOrder(db, "u1", orderSchema.parse({ ...draft, orderName: "Second" }));
     assert.notEqual(second.orderNumber, created.orderNumber);
     const count = await db.order.count();

@@ -17,7 +17,7 @@ export default async function NewOrderPage() {
       <div>
         <p className="eyebrow">New order</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Create a Sanger sequencing order</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Choose a service, add or import physical samples and their primer reactions, then review the submission manifest. Required fields are marked with an asterisk.</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Choose your sample setup, import a spreadsheet, and confirm delivery and billing. Required fields are marked with an asterisk.</p>
       </div>
       <div className="mt-8"><OrderForm defaults={defaults} /></div>
     </div>

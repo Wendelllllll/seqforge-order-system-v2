@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { orderDefaultsSchema } from "@/lib/order-defaults";
 import { OrderPricing } from "@/components/order-pricing";
 import type { ReactionDraft } from "@/lib/order-intake";
@@ -16,6 +17,8 @@ export type ManifestOrder = {
 
 export function OrderManifest({ order }: { order: ManifestOrder }) {
   const parsedDetails = orderDefaultsSchema.safeParse(order.fulfillmentSnapshot);
+  const sharing = z.object({ sharedResultEmails: z.array(z.string().email()).optional() }).safeParse(order.fulfillmentSnapshot);
+  const recipients = sharing.success ? sharing.data.sharedResultEmails || [] : [];
   const details = parsedDetails.success ? parsedDetails.data : null;
   const reactions = order.samples.flatMap((sample) => sample.reactions.map((reaction, index) => ({ sample, reaction, index })));
   return <section className="panel submission-manifest">
@@ -25,6 +28,7 @@ export function OrderManifest({ order }: { order: ManifestOrder }) {
     </div>
     <div className="space-y-3 border-b border-slate-200 p-5 text-sm">
       {order.intakeVersion === 1 ? <p>Legacy demo order: service and container choices were not recorded. Each original entry is preserved as one sample and one reaction.</p> : <p><strong>Priority:</strong> {order.priority} · <strong>Mode:</strong> {order.submissionMode} · <strong>Container:</strong> {order.container}</p>}
+      {recipients.length > 0 && <p><strong>Share results with:</strong> {recipients.join(", ")} · Recorded for lab follow-up; no automatic email or account access.</p>}
       <p><strong>PO / reference:</strong> {order.poNumber || "Not provided"}</p>
       {details ? <div className="grid gap-3 sm:grid-cols-2">
         <div><p><strong>Delivery:</strong> {details.deliveryMethod}</p>
@@ -39,33 +43,30 @@ export function OrderManifest({ order }: { order: ManifestOrder }) {
       <p className="text-slate-500">Service, preparation, stored primers, and synthesis requests require lab confirmation. Turnaround, delivery and sample acceptance require lab confirmation.</p>
     </div>
     <div className="overflow-x-auto">
-      <table className="data-table min-w-[780px]">
-        <caption className="px-5 py-4 text-left text-sm font-bold">Physical samples</caption>
-        <thead><tr><th>ID / DNA name</th><th>Location</th><th>Template</th><th>Length / DNA concentration</th><th>Preparation / notes</th></tr></thead>
+      <table className="data-table min-w-[640px]">
+        <caption className="px-5 py-4 text-left text-sm font-bold">Samples and primers · one row per physical sample</caption>
+        <thead><tr><th>Location</th><th>DNA name</th><th>DNA type</th><th>Primer(s)</th><th>Details</th></tr></thead>
         <tbody>{order.samples.map((sample, index) => <tr key={index}>
-          <td><strong>{sample.sampleKey}</strong><p>{sample.sampleName}</p></td>
           <td>{order.container === "Plate" ? `${sample.plateLabel} / ${sample.well}` : sample.tubeLabel || "Not recorded"}</td>
+          <td><strong>{sample.sampleName}</strong><p className="text-xs text-slate-500">{sample.sampleKey}</p></td>
           <td>{sample.templateType}</td>
-          <td>{sample.templateLength ? `${sample.templateLength} bp` : "Length not provided"}<p>{sample.concentration ? `${sample.concentration}${order.intakeVersion === 1 ? "" : " ng/µL"}` : "Concentration not provided"}</p></td>
-          <td>{sample.preparation}<p className="whitespace-pre-wrap">{sample.notes}</p></td>
-        </tr>)}</tbody>
-      </table>
-    </div>
-    <div className="overflow-x-auto border-t border-slate-200">
-      <table className="data-table min-w-[780px]">
-        <caption className="px-5 py-4 text-left text-sm font-bold">Requested sequencing reactions</caption>
-        <thead><tr><th>Sample / reaction</th><th>Primer</th><th>Source / details</th><th>Special protocol</th></tr></thead>
-        <tbody>{reactions.map(({ sample, reaction: r, index }, row) => <tr key={row}>
-          <td>{sample.sampleKey} / {index + 1}</td><td className="font-semibold">{r.primerName}</td>
-          <td><p>{r.primerSource}</p>
-            {r.primerSource === "Customer supplied" ? <p>{r.primerConcentration ? `${r.primerConcentration} pmol/µL` : "Primer concentration not provided"}</p> : null}
-            {r.primerSource === "Stored at SeqForge" ? <p>Reference: {r.storedPrimerReference}</p> : null}
-            {r.primerSource === "SeqForge synthesized primer" ? <div className="mt-1 space-y-1">
-              <p className="max-w-md break-all font-mono text-xs">5′–{r.primerSequence || "Sequence not recorded"}–3′</p>
-              <p>{order.intakeVersion === 1 ? "Synthesis specifications not recorded" : `${r.purification} · ${r.synthesisScale}`}</p>
-              {r.modification5 || r.modification3 || r.modificationInternal ? <p>Modifications: 5′ {r.modification5 || "none"}; 3′ {r.modification3 || "none"}; internal {r.modificationInternal || "none"}</p> : null}
-            </div> : null}
-          </td><td>{r.specialProtocol}</td>
+          <td>{sample.reactions.length === 1 ? <><strong>{sample.reactions[0].primerName}</strong><p className="text-xs text-slate-500">{sample.reactions[0].primerSource}</p></> : <details><summary className="cursor-pointer font-semibold">{sample.reactions.length} primers / reactions</summary><ol className="mt-2 list-decimal space-y-2 pl-4">{sample.reactions.map((r, i) => <li key={i}><strong>{r.primerName}</strong><p className="text-xs text-slate-500">{r.primerSource}</p></li>)}</ol></details>}</td>
+          <td><details><summary className="cursor-pointer text-sm font-semibold">Sample / primer details</summary><div className="mt-3 space-y-3 text-sm">
+            <p>{sample.templateLength ? `${sample.templateLength} bp` : "Length not provided"}<br />{sample.concentration ? `${sample.concentration}${order.intakeVersion === 1 ? "" : " ng/µL"}` : "DNA concentration not provided"}</p>
+            <p><strong>Preparation:</strong> {sample.preparation}</p>
+            {sample.notes && <p className="whitespace-pre-wrap"><strong>Notes:</strong> {sample.notes}</p>}
+            {sample.reactions.map((r, i) => <div key={i} className="space-y-1 border-t border-slate-200 pt-2">
+              <p><strong>{r.primerName}</strong> · {r.primerSource}</p>
+              {r.primerSource === "Customer supplied" && <p>{r.primerConcentration ? `${r.primerConcentration} pmol/µL` : "Primer concentration not provided"}</p>}
+              {r.primerSource === "Stored at SeqForge" && <p>Reference: {r.storedPrimerReference}</p>}
+              {r.primerSource === "SeqForge synthesized primer" && <>
+                <p className="max-w-md break-all font-mono text-xs">5′–{r.primerSequence || "Sequence not recorded"}–3′</p>
+                <p>{order.intakeVersion === 1 ? "Synthesis specifications not recorded" : `${r.purification} · ${r.synthesisScale}`}</p>
+                {(r.modification5 || r.modification3 || r.modificationInternal) && <p>Modifications: 5′ {r.modification5 || "none"}; 3′ {r.modification3 || "none"}; internal {r.modificationInternal || "none"}</p>}
+              </>}
+              <p><strong>Special protocol:</strong> {r.specialProtocol}</p>
+            </div>)}
+          </div></details></td>
         </tr>)}</tbody>
       </table>
     </div>

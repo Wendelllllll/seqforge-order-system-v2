@@ -18,6 +18,18 @@ export function convertLegacyRows(rows: Row[], order: Omit<OrderDraft, "samples"
   if (header.length < 11 || header.slice(0, 11).some((name, i) => !(aliases[i].includes(normalize(name)) || (i === 9 && /^[a-z]+primers?$/.test(normalize(name))))) || header.slice(11).some(Boolean)) {
     return { mapped, errors: ["Legacy template: keep the original 11 columns in their original order. Empty trailing spreadsheet columns are allowed."] };
   }
+  if (order.container === "Tubes") {
+    const wellsByLabel = new Map<string, Set<string>>();
+    for (const { cells } of rows.slice(1)) {
+      const well = cells[1]?.toUpperCase().replace(/^([A-H])0+([1-9])$/, "$1$2");
+      const label = cells[2]?.toLowerCase();
+      if (!label || !well || !/^[A-H]([1-9]|1[0-2])$/.test(well)) continue;
+      const wells = wellsByLabel.get(label) || new Set<string>();
+      wells.add(well);
+      wellsByLabel.set(label, wells);
+      if (wells.size > 1) return { mapped, errors: ["This spreadsheet uses the same plate label for multiple wells, but Individual tubes is selected. Select 96-well plate to import this file. For a tube order, use the tube template with a unique Tube label for each physical sample."] };
+    }
+  }
   const numbers = new Set<string>(), locations = new Map<string, string>();
   for (const { cells, line } of rows.slice(1)) {
     const error = (message: string) => errors.push(`Row ${line}: ${message}`);
@@ -34,7 +46,7 @@ export function convertLegacyRows(rows: Row[], order: Omit<OrderDraft, "samples"
     const protocols = { noneknown: "None known", gcrich: "GC-rich", rnai: "RNAi", polya: "PolyA", dinucleotiderepeat: "Dinucleotide repeat" } as const;
     const specialProtocol = protocol ? protocols[normalize(protocol) as keyof typeof protocols] : "None known";
     if (!specialProtocol) { error(`Unknown Special protocol "${protocol}".`); continue; }
-    if (custom && universal && choice === "require-single") { error("Both My primers and SeqForge Primers are filled. Choose which source to use in Legacy primer choice, or keep only the intended primer in this row."); continue; }
+    if (custom && universal && choice === "require-single") { error("Both My primers and SeqForge Primers are filled. Keep only one primer column filled per row. To request two reactions, use two rows with the same sample details and one primer per row."); continue; }
     const useUniversal = Boolean(universal) && (!custom || choice === "universal");
     const primerName = useUniversal ? universal : custom;
     const canonicalWell = well.toUpperCase().replace(/^([A-H])0+([1-9])$/, "$1$2");

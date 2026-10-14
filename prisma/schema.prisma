@@ -102,7 +102,6 @@ model Order {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@unique([userId, submissionKey])
-  @@unique([userId, orderNameKey])
 }
 
 model OrderCounter {

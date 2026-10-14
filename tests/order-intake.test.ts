@@ -260,3 +260,57 @@ test("legacy template handles tube labels, blank premix primers and original com
   assert.deepEqual(premix.errors, []);
   assert.equal(premix.samples[0].reactions[0].primerSource, 'Included in mix');
 });
+
+
+test("simple templates preserve the legacy format and span complete plates", async () => {
+  const { simpleOrderTemplate } = await import("../src/lib/simple-order-template");
+  for (const container of ["Tubes", "Plate"] as const) {
+    for (const submissionMode of ["Standard", "Pre-mixed", "Ready to load"] as const) {
+      const order = { ...validOrder(), container, submissionMode };
+      const csv = simpleOrderTemplate(container, 192);
+      assert.ok(importSamples(csv, order).errors.length > 0, "blank template must not submit as real samples");
+      const rows = readDelimited(csv);
+      const populated = rows.map((row, i) => {
+        if (i) { row.cells[3] = `DNA ${i}`; if (submissionMode === "Standard") row.cells[9] = "M13F"; }
+        return row.cells.join(",");
+      }).join("\n");
+      const imported = importSamples(populated, order);
+      assert.deepEqual(imported.errors, []);
+      assert.equal(imported.samples.length, 192);
+      if (container === "Plate") {
+        assert.equal(imported.samples[95].well, "H12");
+        assert.equal(imported.samples[96].well, "A1");
+        assert.equal(imported.samples[96].plateLabel, "Plate-2");
+      }
+    }
+  }
+  for (const count of [0, 251, 1.5, NaN]) assert.throws(() => simpleOrderTemplate("Plate", count));
+});
+
+test("result recipients validate without granting access", () => {
+  const order = validOrder();
+  assert.deepEqual(orderSchema.parse({ ...order, sharedResultEmails: [" Team@Lab.edu "] }).sharedResultEmails, ["team@lab.edu"]);
+  assert.equal(orderSchema.safeParse({ ...order, sharedResultEmails: ["invalid"] }).success, false);
+  assert.equal(orderSchema.safeParse({ ...order, sharedResultEmails: Array(21).fill("a@lab.edu") }).success, false);
+});
+
+test("plate example selected as tubes reports one format error; tube example imports 48 distinct tubes", async () => {
+  const { readFileSync } = await import("node:fs");
+  const plate = readFileSync("public/templates/seqforge-demo-48-samples.csv", "utf8");
+  const mismatch = importSamples(plate, validOrder());
+  assert.equal(mismatch.samples.length, 0);
+  assert.equal(mismatch.errors.length, 1);
+  assert.match(mismatch.errors[0], /Select 96-well plate/);
+  const tubes = importSamples(readFileSync("public/templates/seqforge-demo-48-tubes.csv", "utf8"), validOrder());
+  assert.deepEqual(tubes.errors, []);
+  assert.equal(tubes.samples.length, 48);
+  assert.equal(new Set(tubes.samples.map(s => s.tubeLabel)).size, 48);
+  assert.equal(importSamples(plate, { ...validOrder(), container: "Plate" }).samples.length, 48);
+});
+
+
+test("order names are optional and blank names default to Untitled order", () => {
+  for (const orderName of [undefined, "", "   "]) assert.equal(orderSchema.parse({ ...validOrder(), orderName }).orderName, "Untitled order");
+  assert.equal(orderSchema.parse({ ...validOrder(), orderName: " My project " }).orderName, "My project");
+  assert.equal(orderSchema.safeParse({ ...validOrder(), orderName: "a".repeat(121) }).success, false);
+});
