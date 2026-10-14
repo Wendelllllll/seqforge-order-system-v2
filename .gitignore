@@ -55,3 +55,8 @@ next-env.d.ts
 
 # Local PostgreSQL clusters and development backups
 /storage/local-*/
+/storage/local-*.log
+
+# Local working documents, private agreements, and verification artifacts
+/output/
+/tmp/

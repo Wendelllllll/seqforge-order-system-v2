@@ -11,6 +11,8 @@ import "dotenv/config";
 import { transferSqlite } from "../scripts/sqlite-transfer";
 import { createOrder, SubmissionConflict } from "../src/lib/create-order";
 import { blankOrder, blankReaction, orderSchema } from "../src/lib/order-intake";
+import { newPlasmidSample } from "../src/lib/whole-plasmid";
+import { getRateSchedule, updateRateSchedule, PriceChanged } from "../src/lib/pricing-store";
 
 test("migration preserves legacy orders and new orders persist samples and reactions atomically", async () => {
   const prefix = join(tmpdir(), "seqforge-intake-test-");
@@ -87,6 +89,52 @@ test("migration preserves legacy orders and new orders persist samples and react
     const count = await db.order.count();
     await assert.rejects(createOrder(db, "missing-user", orderSchema.parse(draft)));
     assert.equal(await db.order.count(), count);
+    const plasmid = orderSchema.parse({ ...draft, service: "WHOLE_PLASMID", submissionMode: "Whole plasmid", orderName: "Whole plasmid persistence", samples: [{ ...newPlasmidSample([], "Plate"), sampleName: "Entire plasmid", notes: "Preserve this" }] });
+    const plasmidKey = randomUUID();
+    const plasmidCreated = await createOrder(db, "u1", plasmid, plasmidKey);
+    assert.equal((await createOrder(db, "u1", plasmid, plasmidKey)).id, plasmidCreated.id);
+    const plasmidSaved = await db.order.findUniqueOrThrow({ where: { id: plasmidCreated.id }, include: { samples: { include: { reactions: true } } } });
+    assert.equal(plasmidSaved.service, "WHOLE_PLASMID");
+    assert.equal(plasmidSaved.samples[0].notes, "Preserve this");
+    assert.equal(plasmidSaved.samples[0].reactions.length, 0);
+    assert.equal(plasmidSaved.samples[0].primerName, "");
+    assert.equal((plasmidSaved.pricingSnapshot as { subtotalCents: number }).subtotalCents, 500);
+    const initial = await getRateSchedule(db);
+    const updated = await updateRateSchedule(db, { id: "test-admin", name: "Test Admin" }, { ...initial, rates: { ...initial.rates, "plasmid-plate": 650 }, reason: "Test rate change" });
+    assert.equal(updated.revision, initial.revision + 1);
+    assert.equal(await db.pricingChange.count(), 2);
+    await assert.rejects(updateRateSchedule(db, { id: "test-admin", name: "Test Admin" }, { ...initial, reason: "Stale update" }), PriceChanged);
+    const beforeStale = await db.order.count();
+    await assert.rejects(createOrder(db, "u1", plasmid, randomUUID(), initial.revision), PriceChanged);
+    assert.equal(await db.order.count(), beforeStale);
+    const repriced = await createOrder(db, "u1", plasmid, randomUUID(), updated.revision);
+    assert.equal(((await db.order.findUniqueOrThrow({ where: { id: repriced.id } })).pricingSnapshot as { subtotalCents: number }).subtotalCents, 650);
+    assert.deepEqual((await db.order.findUniqueOrThrow({ where: { id: plasmidSaved.id } })).pricingSnapshot, plasmidSaved.pricingSnapshot);
+    assert.equal((await createOrder(db, "u1", plasmid, plasmidKey, initial.revision)).id, plasmidCreated.id);
+    const largePlasmid = orderSchema.parse({ ...plasmid, samples: [{ ...plasmid.samples[0], templateLength: "12001" }] });
+    const largeCreated = await createOrder(db, "u1", largePlasmid, randomUUID(), updated.revision);
+    assert.equal(((await db.order.findUniqueOrThrow({ where: { id: largeCreated.id } })).pricingSnapshot as { subtotalCents: number }).subtotalCents, 1500);
+
+    // Replay this one additive migration against a populated legacy schedule in the disposable schema.
+    const oldRates = Object.fromEntries(Object.entries(updated.rates).filter(([key]) => !key.startsWith("plasmid-large-")));
+    oldRates["sanger-ready-plate"] = 300;
+    const snapshots = await db.order.findMany({ select: { id: true, pricingSnapshot: true }, orderBy: { id: "asc" } });
+    await db.pricingChange.delete({ where: { id: "migration-whole-plasmid-size-pricing" } });
+    await db.pricingSchedule.update({ where: { id: "active" }, data: { revision: 10, rates: oldRates } });
+    const tierMigration = readFileSync(join(process.cwd(), "prisma/migrations/20261014220000_whole_plasmid_size_pricing/migration.sql"), "utf8");
+    await db.$executeRawUnsafe(tierMigration);
+    const migrated = await getRateSchedule(db);
+    assert.equal(migrated.revision, 11);
+    for (const [key, value] of Object.entries(oldRates)) assert.equal(migrated.rates[key as keyof typeof migrated.rates], value);
+    assert.equal(migrated.rates["plasmid-large-tubes"], 1500);
+    assert.equal(migrated.rates["plasmid-large-plate"], 1500);
+    assert.deepEqual(await db.order.findMany({ select: { id: true, pricingSnapshot: true }, orderBy: { id: "asc" } }), snapshots);
+    const change = await db.pricingChange.findUniqueOrThrow({ where: { revision: 11 } });
+    assert.deepEqual(change.previousRates, oldRates);
+    assert.deepEqual(change.rates, migrated.rates);
+    await db.$executeRawUnsafe(tierMigration);
+    assert.equal((await getRateSchedule(db)).revision, 11);
+    await assert.rejects(createOrder(db, "u1", largePlasmid, randomUUID(), 10), PriceChanged);
   } finally {
     assert.match(schema, /^seqforge_test_[a-f0-9]{32}$/);
     await db.$executeRawUnsafe(`DROP SCHEMA "${schema}" CASCADE`);

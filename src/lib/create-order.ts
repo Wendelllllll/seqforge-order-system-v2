@@ -2,10 +2,11 @@ import type { PrismaClient } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { priceOrder } from "./pricing";
 import type { OrderDraft } from "./order-intake";
+import { getRateSchedule, PriceChanged } from "./pricing-store";
 
 export class SubmissionConflict extends Error {}
 
-export async function createOrder(db: PrismaClient, userId: string, data: OrderDraft, submissionKey: string = randomUUID()) {
+export async function createOrder(db: PrismaClient, userId: string, data: OrderDraft, submissionKey: string = randomUUID(), pricingRevision?: number) {
   const submissionHash = createHash("sha256").update(JSON.stringify(data)).digest("hex");
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId + ":" + submissionKey}, 0))`;
@@ -14,14 +15,18 @@ export async function createOrder(db: PrismaClient, userId: string, data: OrderD
       if (existing.submissionHash !== submissionHash) throw new SubmissionConflict("This submission key was already used for a different order.");
       return { id: existing.id, orderNumber: existing.orderNumber };
     }
+    // Lock the rates until the order snapshot is committed; a concurrent price edit waits.
+    await tx.$queryRaw`SELECT id FROM "PricingSchedule" WHERE id = 'active' FOR SHARE`;
+    const schedule = await getRateSchedule(tx);
+    if (pricingRevision !== undefined && pricingRevision !== schedule.revision) throw new PriceChanged(schedule);
     const now = new Date();
     const prefix = `SF-${String(now.getUTCFullYear()).slice(-2)}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
     const counter = await tx.orderCounter.upsert({ where: { month: prefix }, create: { month: prefix, value: 1 }, update: { value: { increment: 1 } } });
     return tx.order.create({
       data: {
         orderNumber: `${prefix}${String(counter.value).padStart(4, "0")}`,
-        userId, submissionKey, submissionHash, pricingSnapshot: priceOrder(data), fulfillmentSnapshot: { ...data.fulfillment, sharedResultEmails: [...new Set(data.sharedResultEmails || [])], pickupLocation: data.fulfillment.deliveryMethod === "Pickup" ? data.fulfillment.pickupLocation : "", pickupInstructions: data.fulfillment.deliveryMethod === "Pickup" ? data.fulfillment.pickupInstructions : "" }, intakeVersion: 4, orderName: data.orderName,
-        priority: data.priority, container: data.container, submissionMode: data.submissionMode,
+        userId, submissionKey, submissionHash, pricingSnapshot: priceOrder(data, schedule), fulfillmentSnapshot: { ...data.fulfillment, sharedResultEmails: [...new Set(data.sharedResultEmails || [])], pickupLocation: data.fulfillment.deliveryMethod === "Pickup" ? data.fulfillment.pickupLocation : "", pickupInstructions: data.fulfillment.deliveryMethod === "Pickup" ? data.fulfillment.pickupInstructions : "" }, intakeVersion: 4, orderName: data.orderName,
+        service: data.service, priority: data.priority, container: data.container, submissionMode: data.submissionMode,
         poNumber: data.poNumber || null, specialInstructions: data.specialInstructions || null,
         samples: { create: data.samples.map((sample, index) => {
           const { reactions, ...fields } = sample;
@@ -31,7 +36,7 @@ export async function createOrder(db: PrismaClient, userId: string, data: OrderD
             plateLabel: data.container === "Plate" ? sample.plateLabel : "",
             well: data.container === "Plate" ? sample.well : "",
             // Compatibility columns only; current screens read Reaction records.
-            primerName: reactions[0].primerName, primerSource: reactions[0].primerSource,
+            primerName: reactions[0]?.primerName || "", primerSource: reactions[0]?.primerSource || "",
             position: index + 1,
             reactions: { create: reactions.map((reaction, position) => ({
               ...reaction, position: position + 1,

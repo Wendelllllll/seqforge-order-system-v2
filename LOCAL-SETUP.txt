@@ -1,0 +1,30 @@
+SeqForge 本机运行说明（2026-10-14）
+
+网站：http://localhost:3000
+新建订单：http://localhost:3000/orders/new
+管理员后台：http://localhost:3000/admin
+代码：https://github.com/Wendelllllll/seqforge-order-system-v2
+
+已完成配置的电脑：
+双击本文件夹中的 Start-SeqForge.cmd。
+它会打开网站。标准安装的 PostgreSQL 服务需已启动；如果存在原电脑
+%LOCALAPPDATA%\SeqForge\pgdata 下的便携数据库，启动器会按原方式启动。
+网站日志：%LOCALAPPDATA%\SeqForge\website.log 和 website-error.log。
+启动器不会安装软件、应用数据库迁移或创建测试账号。
+
+新电脑或重新拉取 GitHub 后：
+先读本文件夹的 PC_HANDOFF_ZH.md，完成 Node.js、PostgreSQL、.env、
+npm.cmd ci 和 npm.cmd run setup。新电脑不能只复制源码就直接双击启动。
+前台、客户门户、管理员后台和 API 属于同一个应用，无需另开后端项目。
+
+当前工作电脑的 .env 指定实际数据库与结果存储位置。
+原本机便携数据库通常位于 %LOCALAPPDATA%\SeqForge\pgdata，
+结果通常位于 %LOCALAPPDATA%\SeqForge\results，以 .env 为准。
+不要公开 .env；不要重置数据库、删除账号或提交合成测试订单。
+当前工作环境不保证有任何演示账号，之前清理的测试账号不应重新创建。
+
+GitHub 仅同步代码、依赖和迁移，不同步账号、订单、结果、浏览器草稿或合同。
+新电脑演示应建立独立 seqforge_demo 数据库，按 PC_HANDOFF_ZH.md 初始化。
+自动端到端测试运行 npm.cmd run test:smoke，它会使用独立测试环境。
+
+这仍是本机运行地址。推送 GitHub 不会自动将网站发布到公网。

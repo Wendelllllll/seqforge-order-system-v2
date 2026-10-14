@@ -1,3 +1,4 @@
+import { serviceLabel } from "@/lib/whole-plasmid";
 import { ArrowRight, Beaker, CheckCircle2, Clock3, Plus } from "lucide-react";
 import Link from "next/link";
 
@@ -28,7 +29,7 @@ export default async function DashboardPage() {
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Good day, {session.user.firstName}.</h1>
           <p className="mt-2 text-sm text-slate-500">{session.user.organization} · {session.user.labName}</p>
         </div>
-        <Link href="/orders/new" className="button-primary justify-center"><Plus className="h-4 w-4" /> New Sanger order</Link>
+        <Link href="/orders/new" className="button-primary justify-center"><Plus className="h-4 w-4" /> New order</Link>
       </div>
 
       <div className="mt-8 grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3">
@@ -68,7 +69,7 @@ export default async function DashboardPage() {
                   <tr key={order.id} className="hover:bg-slate-50/70">
                     <td className="font-mono text-xs font-bold text-slate-900">{order.orderNumber}</td>
                     <td className="font-semibold text-slate-900">{order.orderName}</td>
-                    <td>Sanger</td>
+                    <td>{serviceLabel(order.service)}</td>
                     <td>{formatDate(order.createdAt)}</td>
                     <td>{order._count.samples}</td>
                     <td><StatusBadge status={order.status} /></td>
@@ -82,7 +83,7 @@ export default async function DashboardPage() {
           <div className="px-6 py-14 text-center">
             <Beaker className="mx-auto h-8 w-8 text-slate-300" />
             <h3 className="mt-4 font-bold text-slate-900">No sequencing orders yet</h3>
-            <p className="mt-2 text-sm text-slate-500">Start with one or more Sanger sequencing samples.</p>
+            <p className="mt-2 text-sm text-slate-500">Choose a service to start your first order.</p>
             <Link href="/orders/new" className="button-primary mt-5"><Plus className="h-4 w-4" /> Create first order</Link>
           </div>
         )}

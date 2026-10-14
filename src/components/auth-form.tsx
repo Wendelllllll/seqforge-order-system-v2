@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
-export function LoginForm() {
+export function LoginForm({ next = null }: { next?: string | null }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,6 +30,7 @@ export function LoginForm() {
       return;
     }
 
+    if (next) { window.location.assign(next); return; }
     router.push("/dashboard");
     router.refresh();
   }
@@ -46,7 +47,7 @@ export function LoginForm() {
       </button>
       <p className="text-center text-sm text-slate-600">
         Need an account?{" "}
-        <Link href="/register" className="font-semibold text-cyan-700 hover:text-cyan-800">
+        <Link href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"} className="font-semibold text-cyan-700 hover:text-cyan-800">
           Register
         </Link>
       </p>
@@ -54,7 +55,7 @@ export function LoginForm() {
   );
 }
 
-export function RegisterForm() {
+export function RegisterForm({ next = null }: { next?: string | null }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -91,6 +92,7 @@ export function RegisterForm() {
       return;
     }
 
+    if (next) { window.location.assign(next); return; }
     router.push("/dashboard");
     router.refresh();
   }
@@ -132,7 +134,7 @@ export function RegisterForm() {
       </button>
       <p className="text-center text-sm text-slate-600">
         Already registered?{" "}
-        <Link href="/login" className="font-semibold text-cyan-700 hover:text-cyan-800">
+        <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="font-semibold text-cyan-700 hover:text-cyan-800">
           Sign in
         </Link>
       </p>

@@ -7,7 +7,7 @@ export function OrderPricing({ snapshot, historical = false }: { snapshot?: unkn
   return <div className="border-t border-slate-200 bg-cyan-50/50 p-5">
     <h3 className="font-bold">Sequencing price · USD</h3>
     <dl className="mt-3 space-y-3 text-sm">
-      {price.lines.map((line, i) => <div key={i} className="flex flex-wrap justify-between gap-2"><dt>{line.description}<p className="text-slate-500">{line.quantity} reactions × {formatMoney(line.unitCents)}</p></dt><dd className="font-semibold">{formatMoney(line.amountCents)}</dd></div>)}
+      {price.lines.map((line, i) => <div key={i} className="flex flex-wrap justify-between gap-2"><dt>{line.description}<p className="text-slate-500">{line.quantity} {price.unit === "sample" ? "samples" : "reactions"} × {formatMoney(line.unitCents)}</p></dt><dd className="font-semibold">{formatMoney(line.amountCents)}</dd></div>)}
       <div className="flex justify-between gap-3 border-t border-cyan-200 pt-3 font-bold"><dt>Sequencing subtotal</dt><dd>{formatMoney(price.subtotalCents)}</dd></div>
     </dl>
     <p className="mt-3 text-xs text-slate-600">Sequencing charges only. Taxes, shipping, and additional services are excluded. No payment is collected on submission.</p>

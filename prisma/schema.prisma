@@ -109,6 +109,24 @@ model OrderCounter {
   value Int
 }
 
+model PricingSchedule {
+  id        String   @id
+  revision  Int
+  rates     Json
+  updatedAt DateTime @updatedAt
+}
+
+model PricingChange {
+  id            String   @id @default(cuid())
+  revision      Int      @unique
+  actorId       String
+  actorName     String
+  reason        String
+  previousRates Json
+  rates         Json
+  createdAt     DateTime @default(now())
+}
+
 model Sample {
   id            String  @id @default(cuid())
   orderId       String

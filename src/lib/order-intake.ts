@@ -3,7 +3,7 @@ import { blankDefaults, orderDefaultsSchema } from "./order-defaults";
 
 export const PRIORITIES = ["Standard", "Same day requested"] as const;
 export const CONTAINERS = ["Tubes", "Plate"] as const;
-export const MODES = ["Standard", "Pre-mixed", "Ready to load"] as const;
+export const MODES = ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid"] as const;
 export const TEMPLATES = ["Plasmid DNA", "PCR product", "Purified PCR product", "BAC", "Genomic DNA", "Other"] as const;
 export const PREPARATIONS = ["None requested", "Miniprep requested", "PCR cleanup requested"] as const;
 export const PROTOCOLS = ["None known", "GC-rich", "RNAi", "PolyA", "Dinucleotide repeat"] as const;
@@ -56,10 +56,11 @@ export const sampleSchema = z.object({
   concentration: positiveNumber,
   preparation: z.enum(PREPARATIONS),
   notes: z.string().trim().max(500),
-  reactions: z.array(reactionSchema).min(1, "Add at least one reaction per sample.").max(MAX_REACTIONS),
+  reactions: z.array(reactionSchema).max(MAX_REACTIONS),
 });
 
 export const orderSchema = z.object({
+  service: z.enum(["SANGER", "WHOLE_PLASMID"]).default("SANGER"),
   fulfillment: orderDefaultsSchema,
   sharedResultEmails: z.array(z.string().trim().toLowerCase().email().max(254)).max(20).optional(),
   orderName: z.string().trim().max(120).optional().transform(value => value || "Untitled order"),
@@ -70,6 +71,8 @@ export const orderSchema = z.object({
   submissionMode: z.enum(MODES),
   samples: z.array(sampleSchema).min(1, "Add at least one sample.").max(MAX_REACTIONS),
 }).superRefine((order, ctx) => {
+  const plasmid = order.service === "WHOLE_PLASMID";
+  if (plasmid !== (order.submissionMode === "Whole plasmid")) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
   const details = order.fulfillment;
   const required = ["contactName", "contactPhone", "billingOrganization", "billingContactName", "billingEmail", "billingAddress"] as const;
   for (const key of required) if (!details[key]) ctx.addIssue({ code: "custom", path: ["fulfillment", key], message: "This detail is required for pickup or billing." });
@@ -93,7 +96,12 @@ export const orderSchema = z.object({
     locations.add(location);
     if (sample.preparation === "Miniprep requested" && sample.templateType !== "Plasmid DNA") issue("preparation", "Miniprep requests require the Plasmid DNA template type.");
     if (sample.preparation === "PCR cleanup requested" && !["PCR product", "Purified PCR product"].includes(sample.templateType)) issue("preparation", "PCR cleanup requests require a PCR template type.");
-    if (order.submissionMode !== "Standard") {
+    if (plasmid) {
+      if (sample.reactions.length) issue("reactions", "Whole plasmid samples do not use Sanger primers or reactions.");
+      if (sample.templateType !== "Plasmid DNA") issue("templateType", "Choose purified plasmid DNA for Whole Plasmid Sequencing.");
+      if (sample.preparation !== "None requested") issue("preparation", "Submit purified plasmid DNA; preparation services are not part of this order.");
+    } else if (!sample.reactions.length) issue("reactions", "Add at least one reaction per sample.");
+    if (!plasmid && order.submissionMode !== "Standard") {
       if (sample.reactions.length !== 1) issue("reactions", "Each premixed tube or well represents one reaction. Use separate physical samples for additional primers.");
       if (sample.preparation !== "None requested") issue("preparation", "Preparation requests require Standard submission.");
     }
@@ -115,7 +123,7 @@ export function blankSample(sampleKey = "S1"): SampleDraft {
   return { sampleKey, sampleName: "", tubeLabel: "", plateLabel: "", well: "", templateType: "Plasmid DNA", templateLength: "", concentration: "", preparation: "None requested", notes: "", reactions: [blankReaction()] };
 }
 export function blankOrder(): OrderDraft {
-  return { fulfillment: blankDefaults(), orderName: "", poNumber: "", specialInstructions: "", priority: "Standard", container: "Tubes", submissionMode: "Standard", samples: [blankSample()] };
+  return { service: "SANGER", fulfillment: blankDefaults(), orderName: "", poNumber: "", specialInstructions: "", priority: "Standard", container: "Tubes", submissionMode: "Standard", samples: [blankSample()] };
 }
 export function reactionCount(samples: { reactions: unknown[] }[]) {
   return samples.reduce((sum, sample) => sum + sample.reactions.length, 0);

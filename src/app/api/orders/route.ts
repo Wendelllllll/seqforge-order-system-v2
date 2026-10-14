@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { createOrder, SubmissionConflict } from "@/lib/create-order";
 import { issueLabel, orderSchema } from "@/lib/order-intake";
 import { prisma } from "@/lib/prisma";
+import { PriceChanged, getRateSchedule } from "@/lib/pricing-store";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -17,9 +18,12 @@ export async function POST(request: Request) {
   } catch { return Response.json({ error: "Send a valid JSON order." }, { status: 400 }); }
   const parsed = orderSchema.safeParse(body);
   if (!parsed.success) return Response.json({ error: "Check the order details.", issues: parsed.error.issues.map(issueLabel) }, { status: 400 });
+  const revision = Number(request.headers.get("X-Pricing-Revision"));
+  if (!Number.isSafeInteger(revision) || revision < 1) return Response.json({ code: "PRICE_CHANGED", error: "Review the current price before submitting.", schedule: await getRateSchedule(prisma) }, { status: 409 });
   try {
-    return Response.json(await createOrder(prisma, session.user.id, parsed.data, submissionKey), { status: 201 });
+    return Response.json(await createOrder(prisma, session.user.id, parsed.data, submissionKey, revision), { status: 201 });
   } catch (error) {
+    if (error instanceof PriceChanged) return Response.json({ code: "PRICE_CHANGED", error: error.message, schedule: error.schedule }, { status: 409 });
     if (error instanceof SubmissionConflict) return Response.json({ error: error.message }, { status: 409 });
     console.error("Order creation failed", error instanceof Error ? error.name : "Unknown error");
     return Response.json({ error: "Unable to save the order. Your entries are still available; please try again." }, { status: 503 });

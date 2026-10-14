@@ -1,0 +1,30 @@
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import { formatDate, ORDER_STATUSES, STATUS_LABELS } from "@/lib/orders";
+import { parseOrderFilters, orderFilterWhere, type OrderQuery } from "@/lib/admin-order-filters";
+import { serviceLabel } from "@/lib/whole-plasmid";
+import { pricingSchema, formatMoney } from "@/lib/pricing";
+import { StatusBadge } from "./status-badge";
+
+export async function AdminOrders({ query, base = "/admin/orders", customerId, title = "Orders" }: { query: OrderQuery; base?: string; customerId?: string; title?: string }) {
+  const filters = parseOrderFilters(customerId ? { ...query, customer: customerId } : query);
+  const where = orderFilterWhere(filters);
+  const [count, customers] = await Promise.all([prisma.order.count({ where }), customerId ? Promise.resolve([]) : prisma.user.findMany({ where: { role: "customer" }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } })]);
+  const pages = Math.max(1, Math.ceil(count / 25));
+  const page = Math.min(filters.page, pages);
+  const orders = await prisma.order.findMany({ where, include: { user: { select: { name: true, email: true, organization: true, labName: true } }, samples: { select: { _count: { select: { reactions: true } } } }, result: { select: { id: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 25, skip: (page - 1) * 25 });
+  const pageUrl = (next: number) => { const params = new URLSearchParams(); for (const [key, value] of Object.entries(filters)) if (key !== "page" && !(customerId && key === "customer") && value) params.set(key, String(value)); params.set("page", String(next)); return `${base}?${params}#orders`; };
+  return <section id="orders" className="panel mt-8 scroll-mt-8 overflow-hidden"><div className="panel-heading"><div><h2 className="text-lg font-bold">{title}</h2><p className="mt-1 text-sm text-slate-500">Search submitted orders. Prices shown are saved at submission.</p></div><span className="metric-pill">{count} matching</span></div>
+    <form key={JSON.stringify(filters)} action={`${base}#orders`} className="space-y-4 border-b border-slate-200 bg-slate-50/70 p-5">
+      <label className="block"><span className="field-label">Search orders</span><input className="field-input mt-2" type="search" name="q" defaultValue={filters.q} maxLength={120} placeholder="Order number, name, customer, email, organization, PO or sample" /></label>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <label><span className="field-label">Service</span><select className="field-input mt-2" name="service" defaultValue={filters.service}><option value="">All services</option><option value="SANGER">Sanger</option><option value="WHOLE_PLASMID">Whole Plasmid</option></select></label>
+        <label><span className="field-label">Submission type</span><select className="field-input mt-2" name="mode" defaultValue={filters.mode}><option value="">All types</option><option>Standard</option><option>Pre-mixed</option><option>Ready to load</option><option value="Whole plasmid">Whole Plasmid</option></select></label>
+        <label><span className="field-label">Status</span><select className="field-input mt-2" name="status" defaultValue={filters.status}><option value="">All statuses</option>{ORDER_STATUSES.map(status => <option key={status} value={status}>{STATUS_LABELS[status]}</option>)}</select></label>
+        {!customerId && <label><span className="field-label">Customer</span><select className="field-input mt-2" name="customer" defaultValue={filters.customer}><option value="">All customers</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.email}</option>)}</select></label>}
+      </div><div className="flex flex-wrap gap-3"><button className="button-primary" type="submit">Apply filters</button><Link className="button-secondary" href={`${base}#orders`}>Clear filters</Link></div>
+    </form>
+    {orders.length ? <div className="overflow-x-auto"><table className="data-table min-w-[1100px]"><thead><tr><th>Order</th><th>Customer</th><th>Service</th><th>Samples / reactions</th><th>Saved subtotal</th><th>Submitted</th><th>Status</th><th>Result</th><th><span className="sr-only">Open</span></th></tr></thead><tbody>{orders.map(order => { const pricing = pricingSchema.safeParse(order.pricingSnapshot); return <tr key={order.id}><td><Link className="font-mono text-xs font-bold text-cyan-800" href={`/admin/orders/${order.id}`}>{order.orderNumber}</Link><p className="mt-1 max-w-44 truncate text-xs text-slate-500">{order.orderName}</p></td><td><Link className="font-semibold text-cyan-800" href={`/admin/customers/${order.userId}`}>{order.user.name}</Link><p className="mt-1 text-xs text-slate-500">{order.user.organization}</p></td><td>{serviceLabel(order.service)}<p className="mt-1 text-xs text-slate-500">{order.container} · {order.submissionMode}</p></td><td>{order.samples.length}{order.service !== "WHOLE_PLASMID" && <> / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)}</>}</td><td className="font-semibold">{pricing.success ? formatMoney(pricing.data.subtotalCents) : "Not recorded"}</td><td>{formatDate(order.createdAt)}</td><td><StatusBadge status={order.status} /></td><td>{order.result ? "Uploaded" : "Pending"}</td><td><Link className="font-bold text-cyan-700" href={`/admin/orders/${order.id}`}>Manage</Link></td></tr>; })}</tbody></table></div> : <div className="p-10 text-center"><h3 className="font-bold">No matching orders</h3><p className="mt-2 text-sm text-slate-500">Try a different search or clear the filters.</p></div>}
+    <div className="flex items-center justify-between gap-3 border-t border-slate-200 p-5 text-sm"><p>{count ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, count)} of ${count}` : "0 orders"} · Page {page} of {pages}</p><nav className="flex gap-3" aria-label="Order pages">{page > 1 && <Link className="button-secondary" href={pageUrl(page - 1)}>Previous</Link>}{page < pages && <Link className="button-secondary" href={pageUrl(page + 1)}>Next</Link>}</nav></div>
+  </section>;
+}

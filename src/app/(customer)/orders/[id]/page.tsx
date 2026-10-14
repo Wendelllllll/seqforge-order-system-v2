@@ -1,3 +1,4 @@
+import { serviceLabel } from "@/lib/whole-plasmid";
 import { OrderManifest } from "@/components/order-manifest";
 import { CheckCircle2, Download, FileText, FlaskConical } from "lucide-react";
 import Link from "next/link";
@@ -30,13 +31,13 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
       {query.submitted === "1" ? (
         <div className="mb-6 flex gap-3 border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your demo request for {order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions is saved under {order.orderNumber}.</p></div>
+          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your demo request for {order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} {order.service !== "WHOLE_PLASMID" && <>and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions</>} is saved under {order.orderNumber}.</p></div>
         </div>
       ) : null}
 
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
-          <div className="flex flex-wrap items-center gap-3"><p className="eyebrow">Sanger sequencing order</p><StatusBadge status={order.status} /></div>
+          <div className="flex flex-wrap items-center gap-3"><p className="eyebrow">{serviceLabel(order.service)} order</p><StatusBadge status={order.status} /></div>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">{order.orderName}</h1>
           <p className="mt-2 font-mono text-sm font-bold text-slate-500">{order.orderNumber}</p>
         </div>
@@ -66,7 +67,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
           <section className="panel p-5">
             <h2 className="text-sm font-bold text-slate-950">Order details</h2>
             <dl className="mt-4 space-y-4 text-sm">
-              <Detail label="Service" value="Sanger DNA sequencing" />
+              <Detail label="Service" value={serviceLabel(order.service)} />
               <Detail label="Submitted" value={formatDateTime(order.createdAt)} />
               <Detail label="PO number" value={order.poNumber || "Not provided"} />
               <Detail label="Samples" value={String(order.samples.length)} />
