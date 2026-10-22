@@ -14,7 +14,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   if (session) redirect(session.user.role === "admin" ? "/admin" : next || "/dashboard");
 
   return (
-    <AuthPage eyebrow="Customer registration" title="Create your laboratory account" description="Register once to submit Sanger orders and keep results organized by laboratory.">
+    <AuthPage eyebrow="Customer registration" title="Create your laboratory account" description="Register and verify your email to submit sequencing and oligo orders, with everything organized by laboratory.">
       <RegisterForm next={next} />
     </AuthPage>
   );

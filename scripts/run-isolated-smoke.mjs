@@ -24,6 +24,10 @@ const env = {
   BETTER_AUTH_SECRET: randomUUID() + randomUUID(),
   RESULT_STORAGE_PATH: path.join(directory, "results"),
   NEXT_TELEMETRY_DISABLED: "1", SEQFORGE_SMOKE_SCHEMA: schema,
+  // Never let synthetic accounts/orders send through the developer's real mailbox.
+  INTERNAL_MAIL_MODE: "preview", INTERNAL_MAIL_TO: "staff@example.test", INTERNAL_MAIL_FROM: "sender@example.test",
+  CUSTOMER_MAIL_MODE: "preview", CUSTOMER_MAIL_FROM: "sender@example.test", CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "",
+  SMTP_HOST: "", SMTP_PORT: "", SMTP_USER: "", SMTP_PASSWORD: "",
 };
 let server;
 let serverLog = "";
@@ -75,7 +79,17 @@ try {
 } finally {
   if (server?.pid && server.exitCode === null) {
     if (process.platform === "win32") {
-      await promisify(execFile)("taskkill", ["/PID", String(server.pid), "/T", "/F"], { windowsHide: true });
+      try {
+        await promisify(execFile)("taskkill", ["/PID", String(server.pid), "/T", "/F"], { windowsHide: true });
+      } catch (error) {
+        // taskkill can kill the server successfully but report a child that exited
+        // before it was reached. Confirm the server is gone before accepting that race.
+        let serverStillRunning = true;
+        try { process.kill(server.pid, 0); } catch (checkError) {
+          if (checkError.code === "ESRCH") serverStillRunning = false;
+        }
+        if (serverStillRunning) throw error;
+      }
     } else {
       server.kill("SIGTERM");
       await new Promise(resolve => server.once("exit", resolve));

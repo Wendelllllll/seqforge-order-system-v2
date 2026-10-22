@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { LoginPageLayout } from "@/components/login-page-layout";
 import { LoginForm } from "@/components/auth-form";
 import { getSession } from "@/lib/session";
-import { safeOrderReturn } from "@/lib/order-resume";
+import { safeAuthReturn } from "@/lib/order-resume";
 
 export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string | string[] }> }) {
-  const next = safeOrderReturn((await searchParams).next);
+  const next = safeAuthReturn((await searchParams).next);
   const session = await getSession();
   if (session) redirect(session.user.role === "admin" ? "/admin" : next || "/dashboard");
 

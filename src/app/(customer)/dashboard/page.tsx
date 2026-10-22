@@ -1,3 +1,4 @@
+import { oligoCount } from "@/lib/oligo-schema";
 import { serviceLabel } from "@/lib/whole-plasmid";
 import { ArrowRight, Beaker, CheckCircle2, Clock3, Plus } from "lucide-react";
 import Link from "next/link";
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
       <div className="mt-8 grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3">
         {[
           { label: "All orders", value: totalOrders, icon: Beaker, detail: "Submitted to SeqForge" },
-          { label: "In progress", value: activeOrders, icon: Clock3, detail: "Active laboratory work" },
+          { label: "In progress", value: activeOrders, icon: Clock3, detail: "Awaiting review or laboratory work" },
           { label: "Completed", value: completedOrders, icon: CheckCircle2, detail: "Results available" },
         ].map(({ label, value, icon: Icon, detail }) => (
           <div key={label} className="bg-white p-5 sm:p-6">
@@ -55,7 +56,7 @@ export default async function DashboardPage() {
         <div className="panel-heading items-center">
           <div>
             <h2 className="text-lg font-bold text-slate-950">Recent orders</h2>
-            <p className="mt-1 text-sm text-slate-500">Your latest sequencing submissions and status updates.</p>
+            <p className="mt-1 text-sm text-slate-500">Your latest orders and status updates.</p>
           </div>
           <Link href="/orders" className="inline-flex items-center gap-1 text-sm font-bold text-cyan-700 hover:text-cyan-900">View all <ArrowRight className="h-4 w-4" /></Link>
         </div>
@@ -63,7 +64,7 @@ export default async function DashboardPage() {
         {orders.length ? (
           <div className="overflow-x-auto">
             <table className="data-table min-w-[760px]">
-              <thead><tr><th>Order number</th><th>Order name</th><th>Service</th><th>Submitted</th><th>Samples</th><th>Status</th><th><span className="sr-only">Open</span></th></tr></thead>
+              <thead><tr><th>Order number</th><th>Order name</th><th>Service</th><th>Submitted</th><th>Quantity</th><th>Status</th><th><span className="sr-only">Open</span></th></tr></thead>
               <tbody>
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50/70">
@@ -71,7 +72,7 @@ export default async function DashboardPage() {
                     <td className="font-semibold text-slate-900">{order.orderName}</td>
                     <td>{serviceLabel(order.service)}</td>
                     <td>{formatDate(order.createdAt)}</td>
-                    <td>{order._count.samples}</td>
+                    <td>{order.service === "OLIGO" ? `${oligoCount(order.oligoSnapshot)} oligos` : `${order._count.samples} samples`}</td>
                     <td><StatusBadge status={order.status} /></td>
                     <td><Link href={`/orders/${order.id}`} className="font-bold text-cyan-700 hover:text-cyan-900">View</Link></td>
                   </tr>
@@ -82,7 +83,7 @@ export default async function DashboardPage() {
         ) : (
           <div className="px-6 py-14 text-center">
             <Beaker className="mx-auto h-8 w-8 text-slate-300" />
-            <h3 className="mt-4 font-bold text-slate-900">No sequencing orders yet</h3>
+            <h3 className="mt-4 font-bold text-slate-900">No orders yet</h3>
             <p className="mt-2 text-sm text-slate-500">Choose a service to start your first order.</p>
             <Link href="/orders/new" className="button-primary mt-5"><Plus className="h-4 w-4" /> Create first order</Link>
           </div>

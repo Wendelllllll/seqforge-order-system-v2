@@ -5,8 +5,7 @@
   const priceData={
     sanger:[
       {name:'Standard',description:'DNA and primer supplied separately',keys:['sanger-standard-tubes','sanger-standard-plate'],type:'standard'},
-      {name:'Pre-mixed',description:'DNA and primer mixed in each sample',keys:['sanger-premixed-tubes','sanger-premixed-plate'],type:'pre-mixed'},
-      {name:'Ready to load',description:'Completed sequencing reactions',keys:['sanger-ready-tubes','sanger-ready-plate'],type:'ready-to-load'}
+      {name:'Pre-mixed',description:'DNA and primer mixed in each sample',keys:['sanger-premixed-tubes','sanger-premixed-plate'],type:'pre-mixed'}
     ],
     nanopore:[
       {name:'Whole plasmid ≤12 kb',description:'Up to 12,000 bp, including 12 kb',keys:['plasmid-tubes','plasmid-plate']},

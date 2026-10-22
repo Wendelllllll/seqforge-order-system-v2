@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { ORDER_STATUSES } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import { isOligoProductionBlocked } from "@/lib/oligo-schema";
 
 const statusSchema = z.object({
   status: z.enum(ORDER_STATUSES),
@@ -21,12 +22,13 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
   }
 
   const { id } = await context.params;
-  const existing = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+  const existing = await prisma.order.findUnique({ where: { id }, select: { status: true, service: true } });
   if (!existing) {
     return Response.json({ error: "Order not found." }, { status: 404 });
   }
 
   const status = parsed.data.status;
+  if (isOligoProductionBlocked(existing.service, status)) return Response.json({ error: "This oligo request is awaiting a quote and customer approval. Production and completion are unavailable until an approved quote can be recorded." }, { status: 409 });
   await prisma.order.update({
     where: { id },
     data: {

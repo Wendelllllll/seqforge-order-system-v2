@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { blankDefaults, orderDefaultsSchema } from "./order-defaults";
+import { hasOligoModifications, MAX_OLIGOS, OLIGO_FORMATS, oligoSchema } from "./oligo-schema";
 
 export const PRIORITIES = ["Standard", "Same day requested"] as const;
 export const CONTAINERS = ["Tubes", "Plate"] as const;
-export const MODES = ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid"] as const;
+export const MODES = ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid", "Oligo standard", "Oligo modified"] as const;
 export const TEMPLATES = ["Plasmid DNA", "PCR product", "Purified PCR product", "BAC", "Genomic DNA", "Other"] as const;
 export const PREPARATIONS = ["None requested", "Miniprep requested", "PCR cleanup requested"] as const;
 export const PROTOCOLS = ["None known", "GC-rich", "RNAi", "PolyA", "Dinucleotide repeat"] as const;
@@ -60,7 +61,7 @@ export const sampleSchema = z.object({
 });
 
 export const orderSchema = z.object({
-  service: z.enum(["SANGER", "WHOLE_PLASMID"]).default("SANGER"),
+  service: z.enum(["SANGER", "WHOLE_PLASMID", "OLIGO"]).default("SANGER"),
   fulfillment: orderDefaultsSchema,
   sharedResultEmails: z.array(z.string().trim().toLowerCase().email().max(254)).max(20).optional(),
   orderName: z.string().trim().max(120).optional().transform(value => value || "Untitled order"),
@@ -69,15 +70,39 @@ export const orderSchema = z.object({
   priority: z.enum(PRIORITIES),
   container: z.enum(CONTAINERS),
   submissionMode: z.enum(MODES),
-  samples: z.array(sampleSchema).min(1, "Add at least one sample.").max(MAX_REACTIONS),
+  samples: z.array(sampleSchema).max(MAX_REACTIONS),
+  oligos: z.array(oligoSchema).max(MAX_OLIGOS).optional(),
+  oligoShippingAddress: z.string().trim().max(1000).optional(),
+  oligoFormat: z.enum(OLIGO_FORMATS).optional(),
 }).superRefine((order, ctx) => {
+  if (order.submissionMode === "Ready to load") ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "This submission type is no longer offered. Choose Standard or Pre-mixed." });
   const plasmid = order.service === "WHOLE_PLASMID";
+  const oligo = order.service === "OLIGO";
   if (plasmid !== (order.submissionMode === "Whole plasmid")) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
+  if (oligo !== ["Oligo standard", "Oligo modified"].includes(order.submissionMode)) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
   const details = order.fulfillment;
   const required = ["contactName", "contactPhone", "billingOrganization", "billingContactName", "billingEmail", "billingAddress"] as const;
-  for (const key of required) if (!details[key]) ctx.addIssue({ code: "custom", path: ["fulfillment", key], message: "This detail is required for pickup or billing." });
-  if (details.deliveryMethod === "Pickup" && !details.pickupLocation) ctx.addIssue({ code: "custom", path: ["fulfillment", "pickupLocation"], message: "Enter the institution, building, room and collection point." });
+  for (const key of required) if (!details[key]) ctx.addIssue({ code: "custom", path: ["fulfillment", key], message: oligo ? "This detail is required for contact and billing." : "This detail is required for pickup or billing." });
+  if (!oligo && details.deliveryMethod === "Pickup" && !details.pickupLocation) ctx.addIssue({ code: "custom", path: ["fulfillment", "pickupLocation"], message: "Enter the institution, building, room and collection point." });
   if (details.paymentMethod === "Purchase order" && !order.poNumber) ctx.addIssue({ code: "custom", path: ["poNumber"], message: "Enter a PO number for purchase order billing." });
+  if (oligo) {
+    if (order.samples.length) ctx.addIssue({ code: "custom", path: ["samples"], message: "Oligo synthesis uses DNA sequences, not incoming samples or Sanger reactions." });
+    if (!order.oligos?.length) ctx.addIssue({ code: "custom", path: ["oligos"], message: "Add at least one oligo." });
+    if (!order.oligoShippingAddress) ctx.addIssue({ code: "custom", path: ["oligoShippingAddress"], message: "Enter the address where your oligos should be delivered." });
+    if (!order.oligoFormat) ctx.addIssue({ code: "custom", path: ["oligoFormat"], message: "Choose the requested delivery format." });
+    const names = new Set<string>();
+    order.oligos?.forEach((item, i) => {
+      const name = item.name.toLowerCase();
+      if (names.has(name)) ctx.addIssue({ code: "custom", path: ["oligos", i, "name"], message: "Use a unique oligo name for each row." });
+      names.add(name);
+      if (order.submissionMode === "Oligo standard" && hasOligoModifications(item)) ctx.addIssue({ code: "custom", path: ["oligos", i, "modification5"], message: "Choose Modified DNA oligos to request modifications." });
+    });
+    if (order.submissionMode === "Oligo modified" && order.oligos?.length && !order.oligos.some(hasOligoModifications)) ctx.addIssue({ code: "custom", path: ["oligos"], message: "Enter at least one modification request, or choose Standard DNA oligos." });
+    if (order.container !== "Tubes") ctx.addIssue({ code: "custom", path: ["container"], message: "This oligo request form currently supports individual tubes." });
+    return;
+  }
+  if (order.oligos?.length || order.oligoShippingAddress || order.oligoFormat) ctx.addIssue({ code: "custom", path: ["oligos"], message: "Oligo synthesis specifications belong to an Oligo order." });
+  if (!order.samples.length) ctx.addIssue({ code: "custom", path: ["samples"], message: "Add at least one sample." });
   const ids = new Set<string>();
   const locations = new Set<string>();
   if (reactionCount(order.samples) > MAX_REACTIONS) ctx.addIssue({ code: "custom", path: ["samples"], message: `This demo supports at most ${MAX_REACTIONS} reactions per order.` });

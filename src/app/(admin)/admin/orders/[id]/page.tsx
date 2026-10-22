@@ -53,8 +53,8 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </div>
 
         <aside className="space-y-6">
-          <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Update laboratory status</h2><StatusControl key={order.status} orderId={order.id} currentStatus={order.status} /></section>
-          <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Result file</h2><ResultUpload orderId={order.id} existingName={order.result?.originalName} />{order.result ? <Link href={`/api/results/${order.result.id}`} className="button-secondary mt-3 w-full justify-center"><Download className="h-4 w-4" /> Download current file</Link> : null}</section>
+          <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Update laboratory status</h2><StatusControl key={order.status} orderId={order.id} currentStatus={order.status} service={order.service} /></section>
+          {order.service !== "OLIGO" && <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Result file</h2><ResultUpload orderId={order.id} existingName={order.result?.originalName} />{order.result ? <Link href={`/api/results/${order.result.id}`} className="button-secondary mt-3 w-full justify-center"><Download className="h-4 w-4" /> Download current file</Link> : null}</section>}
           <section className="panel p-5">
             <h2 className="text-sm font-bold text-slate-950">Status history</h2>
             <ol className="mt-4 space-y-4">{order.statusHistory.map((entry) => <li key={entry.id} className="border-l-2 border-cyan-600 pl-3"><p className="text-sm font-semibold capitalize text-slate-800">{entry.status.toLowerCase()}</p><p className="mt-1 text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p></li>)}</ol>

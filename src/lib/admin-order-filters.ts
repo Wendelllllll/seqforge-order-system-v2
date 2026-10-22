@@ -7,8 +7,8 @@ export function parseOrderFilters(query: OrderQuery) {
   const rawPage = Number(value("page"));
   return {
     q: value("q").slice(0, 120),
-    service: ["SANGER", "WHOLE_PLASMID"].includes(value("service")) ? value("service") : "",
-    mode: ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid"].includes(value("mode")) ? value("mode") : "",
+    service: ["SANGER", "WHOLE_PLASMID", "OLIGO"].includes(value("service")) ? value("service") : "",
+    mode: ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid", "Oligo standard", "Oligo modified"].includes(value("mode")) ? value("mode") : "",
     status: isOrderStatus(value("status")) ? value("status") : "",
     customer: value("customer").slice(0, 128),
     page: Number.isSafeInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 100000) : 1,
@@ -25,6 +25,7 @@ export function orderFilterWhere(filters: ReturnType<typeof parseOrderFilters>):
       { orderNumber: search }, { orderName: search }, { poNumber: search },
       { user: { name: search } }, { user: { email: search } }, { user: { organization: search } }, { user: { labName: search } },
       { samples: { some: { sampleName: search } } },
+      { oligoSnapshot: { path: ["searchNames"], string_contains: filters.q, mode: "insensitive" } },
     ] } : {}),
   };
 }

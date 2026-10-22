@@ -2,16 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { blankOrder, blankReaction } from "../src/lib/order-intake";
 import { priceOrder, RATE_CENTS, formatMoney } from "../src/lib/pricing";
-import { DEFAULT_SCHEDULE, dollarsToCents, historicalRatesSchema, priceUpdateSchema, rateScheduleSchema } from "../src/lib/rate-schedule";
+import { ACTIVE_RATE_ITEMS, DEFAULT_SCHEDULE, dollarsToCents, historicalRatesSchema, priceUpdateSchema, rateScheduleSchema } from "../src/lib/rate-schedule";
 import { orderFilterWhere, parseOrderFilters } from "../src/lib/admin-order-filters";
 for (const container of ["Plate", "Tubes"] as const) {
-  for (const submissionMode of ["Standard", "Pre-mixed", "Ready to load"] as const) {
+  for (const submissionMode of ["Standard", "Pre-mixed"] as const) {
     test(`${container} ${submissionMode} uses the confirmed per-reaction rate`, () => {
       const draft = { ...blankOrder(), container, submissionMode };
       assert.equal(priceOrder(draft).subtotalCents, RATE_CENTS[container][submissionMode]);
     });
   }
 }
+
+test("Only currently offered services appear in price management while historical rates remain readable", () => {
+  assert.equal(ACTIVE_RATE_ITEMS.length, 8);
+  assert.ok(ACTIVE_RATE_ITEMS.every(item => !item.key.startsWith("sanger-ready-")));
+  assert.equal(historicalRatesSchema.parse(DEFAULT_SCHEDULE.rates)["sanger-ready-tubes"], 350);
+});
 test("96 pre-mixed plate reactions cost $336 and multiple primers count separately", () => {
   const draft = blankOrder(); draft.container = "Plate"; draft.submissionMode = "Pre-mixed";
   draft.samples = Array.from({ length: 96 }, () => structuredClone(draft.samples[0]));
@@ -46,7 +52,7 @@ test("admin order filters compose search and exact filters and normalize bad par
   const where = orderFilterWhere(filters);
   assert.equal(filters.q, "Sample-X"); assert.equal(filters.page, 2);
   assert.equal(where.service, "WHOLE_PLASMID"); assert.equal(where.userId, "u1"); assert.equal(where.status, "SUBMITTED");
-  assert.equal(where.OR?.length, 8);
+  assert.equal(where.OR?.length, 9);
   assert.equal(parseOrderFilters({ page: "-1", service: "invalid", status: ["QC"] }).page, 1);
   assert.deepEqual(orderFilterWhere(parseOrderFilters({})), {});
 });

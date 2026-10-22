@@ -6,48 +6,37 @@ import { priceOrder } from "../src/lib/pricing";
 import { simpleOrderTemplate } from "../src/lib/simple-order-template";
 import { readDelimited } from "../src/lib/order-import";
 import { inspectSangerSheet, parseMappedSanger, suggestMapping } from "../src/lib/sanger-column-mapping";
+import { ORDER_SERVICES } from "../src/lib/order-services";
 
-test("Ready to load supports manual entry without primer or DNA measurements", () => {
+test("Retired Ready to load is not offered and cannot validate as a new order", () => {
+  assert.deepEqual(ORDER_SERVICES.find(service => service.id === "sanger")?.options.map(option => option.id), ["standard", "pre-mixed"]);
   const sample = { ...newSangerSample([], "Tubes", "Ready to load"), sampleName: "Completed reaction" };
   const order = { ...blankOrder(), submissionMode: "Ready to load" as const, samples: [sample] };
   const parsed = orderSchema.safeParse(order);
-  assert.equal(parsed.success, false, "Delivery and billing still need completion");
-  if (!parsed.success) assert.deepEqual(parsed.error.issues.filter(issue => issue.path[0] === "samples"), []);
-  assert.equal(reactionCount(order.samples), 1);
-  assert.equal(priceOrder(order).subtotalCents, 350);
+  assert.equal(parsed.success, false);
+  if (!parsed.success) assert.ok(parsed.error.issues.some(issue => issue.path[0] === "submissionMode" && issue.message.includes("no longer offered")));
 });
 
-test("Ready to load CSV and Excel mapping preserve names, locations, optional primers and notes", () => {
+test("Retired Ready to load rejects both CSV and Excel imports", () => {
   const order = { ...blankOrder(), submissionMode: "Ready to load" as const };
   for (const separator of [",", "\t"]) {
     const text = [["Project", "Reaction name", "Tube label", "Primer", "Notes"], ["Ignore me", "Ready A", "R1", "T7", "Batch 1"], ["Ignore me", "Ready B", "R2", "", "Batch 2"]].map(row => row.join(separator)).join("\n");
     const sheet = inspectSangerSheet(text, "Tubes");
-    assert.match(parseMappedSanger(sheet, order, "").errors[0], /completed sequencing reaction/);
+    assert.match(parseMappedSanger(sheet, order, "").errors[0], /no longer offered/);
     const result = parseMappedSanger(sheet, order, "Included in mix");
-    assert.deepEqual(result.errors, []);
-    assert.deepEqual(result.samples.map(sample => [sample.sampleName, sample.tubeLabel, sample.notes]), [["Ready A", "R1", "Batch 1"], ["Ready B", "R2", "Batch 2"]]);
-    assert.equal(result.samples[1].reactions[0].primerName, "Included in mix");
-    assert.equal(priceOrder({ ...order, samples: result.samples }).subtotalCents, 700);
-    assert.ok(!JSON.stringify(result.samples).includes("Ignore me"));
+    assert.deepEqual(result.samples, []);
+    assert.match(result.errors[0], /no longer offered/);
   }
 });
 
-test("Ready to load templates round-trip tubes and plates beyond 96 wells", () => {
+test("Retired Ready to load templates are no longer generated", () => {
   for (const container of ["Tubes", "Plate"] as const) {
-    const order = { ...blankOrder(), submissionMode: "Ready to load" as const, container };
-    const sheet = inspectSangerSheet(simpleOrderTemplate(container, 97, "Ready to load"), container);
-    assert.ok(parseMappedSanger(sheet, order, "Included in mix").errors.length, "Blank template is not an order");
-    sheet.rows.slice(1).forEach((row, index) => { row.cells[0] = `Ready-${index + 1}`; });
-    const result = parseMappedSanger(sheet, order, "Included in mix");
-    assert.deepEqual(result.errors, []);
-    assert.equal(reactionCount(result.samples), 97);
-    if (container === "Plate") assert.deepEqual([result.samples[96].plateLabel, result.samples[96].well], ["Plate-2", "A1"]);
-    else assert.equal(result.samples[96].tubeLabel, "Tube-97");
+    assert.throws(() => simpleOrderTemplate(container, 97, "Ready to load"), /no longer offered/);
   }
 });
 
-test("Ready to load rejects duplicate locations, multiple primers and separate preparation requests", () => {
-  const order = { ...blankOrder(), submissionMode: "Ready to load" as const };
+test("Pre-mixed rejects duplicate locations, multiple primers and separate preparation requests", () => {
+  const order = { ...blankOrder(), submissionMode: "Pre-mixed" as const };
   for (const text of [
     "Sample name,Tube label\nA,R1\nB,R1",
     "Sample name,Primer\nA,T7;M13R",

@@ -1,13 +1,15 @@
 # Customer ordering demo — September 7, 2026
 
+> Historical Sanger field notes. For the current guest, draft, pricing and Oligo workflows, see README.md. Oligo synthesis is a separate quote-request flow with outbound delivery details and no incoming DNA samples.
+
 This iteration models the Sanger intake fields observed in SeqForge's existing customer portal. It is a local demo, not a production ordering or pricing service.
 
 ## Customer workflow
 
 1. Enter the project reference, optional PO and handling instructions.
-2. Request Standard or Same day priority; select Tubes or Plate and Standard, Pre-mixed or Ready to load submission.
+2. Request Standard or Same day priority; select Tubes or Plate and Standard or Pre-mixed submission.
 3. Enter each physical DNA sample once. Give it an order-local sample ID, DNA name, and either a unique tube label or plate label plus well.
-4. Add one or more primer reactions to each Standard sample. Premixed/ready-to-load locations each represent one reaction with an Included in mix primer.
+4. Add one or more primer reactions to each Standard sample. Pre-mixed locations each represent one reaction with an Included in mix primer.
 5. Optionally import a CSV/TSV/TXT file or paste spreadsheet cells with headers. Validate first, inspect the preview, then explicitly replace the sample list.
 6. Review the full manifest, return to edit if necessary, and confirm submission.
 7. Open the saved order and its printable manifest. Administrators see the same persisted information, can update status, and deliver a result through the existing upload workflow.
@@ -24,7 +26,7 @@ Primer sources:
 - **SeqForge universal primer:** a selection from the 23 names observed in the current portal.
 - **Stored at SeqForge:** primer name and a required lab reference. This is a request; the demo has no primer inventory integration.
 - **SeqForge synthesized primer:** primer name, required 5′ to 3′ IUPAC DNA sequence, requested purification/scale, and optional 5′, 3′ and internal modification descriptions.
-- **Included in mix:** primer identification for a premixed or ready-to-load physical reaction.
+- **Included in mix:** primer identification for a pre-mixed physical reaction.
 
 Each reaction also records a special protocol request. Stored-primer availability, synthesis feasibility, modifications, preparation services, pricing and turnaround require lab confirmation.
 
@@ -63,7 +65,7 @@ The authenticated /manifest/[id] route allows only the owner or an admin. The pr
 ## Verification
 
 - `npm run verify`: lint, route types, TypeScript, automated validation/import/migration/persistence tests, and the production build.
-- With the local application running on port 3000, `npm run test:smoke` exercises registration/login, invalid requests, persisted customer/admin manifests, status updates, result upload/download, and cross-customer isolation. It creates synthetic accounts, orders and a text result in the local demo database. It does not contact the live SeqForge portal.
+- `npm run test:smoke` creates a disposable application on a separate port with a private PostgreSQL schema and result storage. It exercises registration/login, invalid requests, persisted customer/admin manifests, status updates, result upload/download, Oligo quote requests and cross-customer isolation. Never submit synthetic orders to the working localhost:3000 app or bypass the smoke-script guard.
 - Browser checks cover spreadsheet conflict correction, multi-primer import, review/edit preservation, submission, and the saved manifest.
 
 ## Before a customer opens a public link

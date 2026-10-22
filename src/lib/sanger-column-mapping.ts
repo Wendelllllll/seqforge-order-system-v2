@@ -45,6 +45,7 @@ export function inspectSangerSheet(text: string, container: OrderDraft["containe
 
 export function parseMappedSanger(sheet: MappingSheet, order: Omit<OrderDraft, "samples">, source: MappingSource) {
   const fail = (message: string) => ({ samples: [] as SampleDraft[], errors: [message] });
+  if (order.submissionMode === "Ready to load") return fail("This submission type is no longer offered. Choose Standard or Pre-mixed.");
   const fields = sheet.columns.filter(Boolean);
   if (!fields.includes("sampleName")) return fail("Map a column to Sample name.");
   if (new Set(fields).size !== fields.length) return fail("Each destination field can be mapped only once. Ignore duplicate columns or choose another field.");
@@ -52,7 +53,7 @@ export function parseMappedSanger(sheet: MappingSheet, order: Omit<OrderDraft, "
   const data = sheet.rows.slice(sheet.hasHeader ? 1 : 0);
   if (!data.length || data.length > MAX_REACTIONS) return fail(`Import between 1 and ${MAX_REACTIONS} data rows.`);
   const standard = order.submissionMode === "Standard";
-  if (!source || (!standard && source !== "Included in mix")) return fail(standard ? "Explicitly choose where the primers come from." : order.submissionMode === "Ready to load" ? "Confirm each tube or well contains one completed sequencing reaction, ready for loading." : "Confirm that DNA and one primer are already mixed in each tube or well.");
+  if (!source || (!standard && source !== "Included in mix")) return fail(standard ? "Explicitly choose where the primers come from." : "Confirm that DNA and one primer are already mixed in each tube or well.");
   const splitPrimers = fields.includes("customerPrimer") || fields.includes("universalPrimer");
   if (splitPrimers && fields.includes("primerName")) return fail("Map either Primer name(s) or the old template primer columns, not both.");
   if (standard && source === "column" && !fields.includes("primerSource")) return fail("Map your source column to Primer source.");

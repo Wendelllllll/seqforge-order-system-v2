@@ -1,3 +1,4 @@
+import { oligoCount } from "@/lib/oligo-schema";
 import { serviceLabel } from "@/lib/whole-plasmid";
 import { OrderManifest } from "@/components/order-manifest";
 import { CheckCircle2, Download, FileText, FlaskConical } from "lucide-react";
@@ -31,7 +32,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
       {query.submitted === "1" ? (
         <div className="mb-6 flex gap-3 border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your demo request for {order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} {order.service !== "WHOLE_PLASMID" && <>and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions</>} is saved under {order.orderNumber}.</p></div>
+          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your request for {order.service === "OLIGO" ? <>{oligoCount(order.oligoSnapshot)} oligos</> : <>{order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} {order.service !== "WHOLE_PLASMID" && <>and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions</>}</>} is saved under {order.orderNumber}.</p></div>
         </div>
       ) : null}
 
@@ -44,7 +45,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
         <Link href={`/manifest/${order.id}`} className="button-secondary">View / print submission manifest</Link>
       </div>
 
-      <section className="panel mt-8 p-5 sm:p-6">
+      {order.service === "OLIGO" ? <section className="panel mt-8 border-amber-200 bg-amber-50 p-5 sm:p-6"><h2 className="font-bold text-amber-950">Awaiting lab quote</h2><p className="mt-2 text-sm text-amber-900">Your request is saved for review. The lab will contact you to confirm specifications and price. Production starts only after you approve the quote.</p></section> : <section className="panel mt-8 p-5 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-6">
           {ORDER_STATUSES.map((status, index) => {
             const complete = index <= currentIndex;
@@ -56,7 +57,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
             );
           })}
         </div>
-      </section>
+      </section>}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="min-w-0 space-y-6">
@@ -70,11 +71,11 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
               <Detail label="Service" value={serviceLabel(order.service)} />
               <Detail label="Submitted" value={formatDateTime(order.createdAt)} />
               <Detail label="PO number" value={order.poNumber || "Not provided"} />
-              <Detail label="Samples" value={String(order.samples.length)} />
+              <Detail label={order.service === "OLIGO" ? "Oligos" : "Samples"} value={String(order.service === "OLIGO" ? oligoCount(order.oligoSnapshot) : order.samples.length)} />
             </dl>
           </section>
 
-          <section className={`border p-5 ${order.result ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+          {order.service !== "OLIGO" && <section className={`border p-5 ${order.result ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
             <div className="flex items-center gap-3"><FlaskConical className={`h-5 w-5 ${order.result ? "text-emerald-700" : "text-slate-400"}`} /><h2 className="text-sm font-bold text-slate-950">Sequencing result</h2></div>
             {order.result ? (
               <div className="mt-4">
@@ -82,7 +83,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
                 <Link href={`/api/results/${order.result.id}`} className="button-primary mt-4 w-full justify-center bg-emerald-700 hover:bg-emerald-800"><Download className="h-4 w-4" /> Download result</Link>
               </div>
             ) : <p className="mt-3 text-sm leading-6 text-slate-500">A download will appear here after SeqForge completes processing and uploads your result.</p>}
-          </section>
+          </section>}
         </aside>
       </div>
     </div>

@@ -1,5 +1,7 @@
 # Existing SeqForge customer workflow and template compatibility
 
+> Historical source research. The current application offers Standard and Pre-mixed Sanger orders only; Ready to load has been retired. These observations describe the former website, not the currently available service menu.
+
 Observed in the authenticated customer UI on 2026-10-05 (Pacific time). Only public sample templates are included in this repository; no customer records or payment details were copied. No order was submitted and the existing cart remained empty.
 
 ## Sanger entry

@@ -266,11 +266,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #39
 @media(prefers-reduced-motion:reduce) { .order-service-card,.service-detail-content,.sanger-flow-main,.sanger-live-counts strong,.sanger-count-value,.sanger-grid tbody,.sanger-primer,.sanger-paste-preview { animation:none!important; }.order-service-art>svg,.order-service-action svg,.service-choice,.service-choice-icon,.sanger-order-form .button-primary,.sanger-order-form .button-secondary,.sanger-format { transition:none; }.service-choice:hover,.service-choice[aria-pressed=true] .service-choice-icon,.order-service-card:hover .order-service-art>svg,.order-service-card:hover .order-service-action svg { transform:none; } }
 
 /* Prepared reactions use a shorter table; original DNA metadata stays in details. */
-.sanger-grid.sanger-grid-ready { min-width:560px; }
-.sanger-grid.sanger-grid-ready th:nth-child(1) { width:32%; }
-.sanger-grid.sanger-grid-ready th:nth-child(2) { width:25%; }
-.sanger-grid.sanger-grid-ready th:nth-child(3) { width:35%; }
-.sanger-grid.sanger-grid-ready th:last-child { width:8%; }
 
 .sanger-grid.plasmid-grid { min-width:650px; }
 .sanger-grid.plasmid-grid th:nth-child(1) { width:30%; }

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { ORDER_STATUSES, STATUS_LABELS } from "@/lib/orders";
+import { isOligoProductionBlocked } from "@/lib/oligo-schema";
 
-export function StatusControl({ orderId, currentStatus }: { orderId: string; currentStatus: string }) {
+export function StatusControl({ orderId, currentStatus, service = "SANGER" }: { orderId: string; currentStatus: string; service?: string }) {
   const router = useRouter();
   const [status, setStatus] = useState(currentStatus);
   const [saved, setSaved] = useState(false);
@@ -40,11 +41,12 @@ export function StatusControl({ orderId, currentStatus }: { orderId: string; cur
       <label className="field-label">
         Current status
         <select className="field-input mt-2" value={status} onChange={(event) => { setStatus(event.target.value); setSaved(false); }}>
-          {ORDER_STATUSES.map((value) => (
+          {ORDER_STATUSES.filter(value => !isOligoProductionBlocked(service, value)).map((value) => (
             <option key={value} value={value}>{STATUS_LABELS[value]}</option>
           ))}
         </select>
       </label>
+      {service === "OLIGO" && <p className="mt-3 text-xs text-amber-900">Quote pending. This version records requests for lab review; production and completion remain unavailable until customer quote approval can be recorded.</p>}
       <button type="button" onClick={updateStatus} disabled={loading || status === currentStatus} className="button-primary mt-3 w-full justify-center">
         {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
         {saved ? "Status updated" : "Update status"}

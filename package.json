@@ -13,11 +13,16 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "test": "tsx --test tests/order-intake.test.ts tests/pricing.test.ts tests/sanger-entry.test.ts tests/order-resume.test.ts tests/whole-plasmid.test.ts",
+    "test": "tsx --test tests/order-intake.test.ts tests/pricing.test.ts tests/sanger-entry.test.ts tests/order-resume.test.ts tests/whole-plasmid.test.ts tests/oligo-entry.test.ts tests/oligo-backend.test.ts tests/customer-pricing.test.ts tests/customer-price-display.test.ts tests/internal-mail.test.ts tests/customer-mail.test.ts",
     "test:db": "tsx --test tests/order-persistence.test.ts",
     "db:import-sqlite": "tsx scripts/import-sqlite.ts",
     "db:deploy": "prisma migrate deploy",
     "test:smoke": "node scripts/run-isolated-smoke.mjs",
+    "test:mail-db": "tsx --test tests/internal-notifications.test.ts",
+    "mail:status": "tsx scripts/internal-mail.ts status",
+    "mail:test": "tsx scripts/internal-mail.ts test",
+    "mail:flush": "tsx scripts/internal-mail.ts flush",
+    "mail:retry": "tsx scripts/internal-mail.ts retry",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
@@ -26,6 +31,7 @@
     "better-auth": "^1.7.2",
     "lucide-react": "^0.544.0",
     "next": "16.3.4",
+    "nodemailer": "^10.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.1.11"
@@ -33,6 +39,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.1",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

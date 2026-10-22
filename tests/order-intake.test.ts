@@ -59,8 +59,25 @@ test("stored and synthesized primers require appropriate details", () => {
     r.primerSequence = sequence; assert.equal(orderSchema.safeParse(order).success, false);
   }
 });
-test("premixed and ready-to-load submissions use one included-primer reaction per location", () => {
-  for (const mode of ["Pre-mixed", "Ready to load"] as const) {
+test("complete retired submissions are rejected even when their sample and billing details are valid", () => {
+  for (const container of ["Tubes", "Plate"] as const) {
+    const order = validOrder();
+    order.submissionMode = "Ready to load";
+    order.container = container;
+    Object.assign(order.samples[0], { plateLabel: "P1", well: "A1" });
+    order.samples[0].reactions[0].primerSource = "Included in mix";
+    const parsed = orderSchema.safeParse(order);
+    assert.equal(parsed.success, false);
+    if (!parsed.success) {
+      assert.equal(parsed.error.issues.length, 1);
+      assert.deepEqual(parsed.error.issues[0].path, ["submissionMode"]);
+      assert.match(parsed.error.issues[0].message, /no longer offered/);
+    }
+  }
+});
+
+test("premixed submissions use one included-primer reaction per location", () => {
+  for (const mode of ["Pre-mixed"] as const) {
     const order = validOrder();
     order.submissionMode = mode;
     assert.equal(orderSchema.safeParse(order).success, false);
@@ -86,7 +103,7 @@ test("CSV reader supports BOM, quoted commas, escaped quotes, multiline fields a
   assert.throws(() => readDelimited('id,notes\nS1,"oops"extra'), /Row 2/);
 });
 test("all generated templates round-trip for tube/plate and every mode", () => {
-  for (const container of ["Tubes", "Plate"] as const) for (const submissionMode of ["Standard", "Pre-mixed", "Ready to load"] as const) {
+  for (const container of ["Tubes", "Plate"] as const) for (const submissionMode of ["Standard", "Pre-mixed"] as const) {
     const order = { ...validOrder(), container, submissionMode };
     const result = importSamples(templateCsv(container, submissionMode), order);
     assert.deepEqual(result.errors, []);
@@ -153,7 +170,7 @@ test("V4 CSV preserves detailed sample and primer data with incomplete order det
 test("bulk plate entry generates 96 distinct locations with correct well ordering and valid order data", async () => {
   const { addPlate } = await import("../src/lib/plate-intake");
   for (const direction of ["column", "row"] as const) {
-    for (const mode of ["Standard", "Pre-mixed", "Ready to load"] as const) {
+    for (const mode of ["Standard", "Pre-mixed"] as const) {
       const order = { ...validOrder(), container: "Plate" as const, submissionMode: mode, samples: [blankSample()] };
       const samples = addPlate(order, { label: "P1", count: 96, direction, prefix: "Clone", primerName: "Custom-F" });
       assert.equal(samples.length, 96);
@@ -265,7 +282,7 @@ test("legacy template handles tube labels, blank premix primers and original com
 test("simple templates preserve the legacy format and span complete plates", async () => {
   const { simpleOrderTemplate } = await import("../src/lib/simple-order-template");
   for (const container of ["Tubes", "Plate"] as const) {
-    for (const submissionMode of ["Standard", "Pre-mixed", "Ready to load"] as const) {
+    for (const submissionMode of ["Standard", "Pre-mixed"] as const) {
       const order = { ...validOrder(), container, submissionMode };
       const csv = simpleOrderTemplate(container, 192);
       assert.ok(importSamples(csv, order).errors.length > 0, "blank template must not submit as real samples");

@@ -12,16 +12,23 @@ export const RATE_ITEMS = [
   { key: "plasmid-large-tubes", service: "Whole Plasmid", mode: "Whole plasmid >12 kb", container: "Tubes", unit: "sample", cents: 1500 },
   { key: "plasmid-large-plate", service: "Whole Plasmid", mode: "Whole plasmid >12 kb", container: "Plate", unit: "sample", cents: 1500 },
 ] as const;
+// Retired rates remain readable for saved quotes and historical order snapshots.
+export const ACTIVE_RATE_ITEMS = RATE_ITEMS.filter(item => item.mode !== "Ready to load");
 export type RateKey = typeof RATE_ITEMS[number]["key"];
 const keys = RATE_ITEMS.map(item => item.key) as [RateKey, ...RateKey[]];
 const rateAmount = z.number().int().min(0).max(1_000_000);
 export const ratesSchema = z.record(z.enum(keys), rateAmount);
 // History is immutable and earlier revisions contain only the original eight rates.
 export const historicalRatesSchema = z.partialRecord(z.enum(keys), rateAmount);
-export const rateScheduleSchema = z.object({ revision: z.number().int().positive(), rates: ratesSchema });
+export const rateScheduleSchema = z.object({
+  revision: z.number().int().positive(), rates: ratesSchema,
+  customerId: z.string().min(1).max(128).optional(),
+  customerRevision: z.number().int().nonnegative().optional(),
+  overriddenKeys: z.array(z.enum(keys)).max(RATE_ITEMS.length).optional(),
+});
 export type RateSchedule = z.infer<typeof rateScheduleSchema>;
 export const DEFAULT_SCHEDULE: RateSchedule = { revision: 1, rates: Object.fromEntries(RATE_ITEMS.map(item => [item.key, item.cents])) as RateSchedule["rates"] };
-export const priceUpdateSchema = rateScheduleSchema.extend({ reason: z.string().trim().min(1).max(500) }).strict();
+export const priceUpdateSchema = z.object({ revision: z.number().int().positive(), rates: ratesSchema, reason: z.string().trim().min(1).max(500) }).strict();
 const legacyRatesSchema = z.record(z.enum(keys.filter(key => !key.startsWith("plasmid-large-")) as [RateKey, ...RateKey[]]), rateAmount);
 // Preserve a pre-tier draft's original flat quote so it can be compared with today's rates.
 export const savedRateScheduleSchema = z.union([rateScheduleSchema, z.object({ revision: z.number().int().positive(), rates: legacyRatesSchema }).transform(({ revision, rates }) => ({

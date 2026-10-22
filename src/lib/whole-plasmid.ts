@@ -47,4 +47,4 @@ export function plasmidTemplate(container: OrderDraft["container"], count = 8) {
   return rows.map(row => row.map(cell => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\r\n") + "\r\n";
 }
 
-export const serviceLabel = (service?: string) => service === "WHOLE_PLASMID" ? "Whole Plasmid Sequencing" : "Sanger sequencing";
+export const serviceLabel = (service?: string) => service === "OLIGO" ? "Oligo synthesis" : service === "WHOLE_PLASMID" ? "Whole Plasmid Sequencing" : "Sanger sequencing";

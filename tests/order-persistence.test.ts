@@ -9,10 +9,12 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import "dotenv/config";
 import { transferSqlite } from "../scripts/sqlite-transfer";
-import { createOrder, SubmissionConflict } from "../src/lib/create-order";
+import { AccountChanged, createOrder, SubmissionConflict } from "../src/lib/create-order";
 import { blankOrder, blankReaction, orderSchema } from "../src/lib/order-intake";
 import { newPlasmidSample } from "../src/lib/whole-plasmid";
 import { getRateSchedule, updateRateSchedule, PriceChanged } from "../src/lib/pricing-store";
+import { orderFilterWhere, parseOrderFilters } from "../src/lib/admin-order-filters";
+import { CustomerNotFound, CustomerPriceChanged, getCustomerPricing, getEffectiveRateSchedule, updateCustomerPricing } from "../src/lib/customer-pricing-store";
 
 test("migration preserves legacy orders and new orders persist samples and reactions atomically", async () => {
   const prefix = join(tmpdir(), "seqforge-intake-test-");
@@ -99,6 +101,19 @@ test("migration preserves legacy orders and new orders persist samples and react
     assert.equal(plasmidSaved.samples[0].reactions.length, 0);
     assert.equal(plasmidSaved.samples[0].primerName, "");
     assert.equal((plasmidSaved.pricingSnapshot as { subtotalCents: number }).subtotalCents, 500);
+    const oligo = orderSchema.parse({ ...draft, service: "OLIGO", submissionMode: "Oligo modified", container: "Tubes", orderName: "Oligo quote request", samples: [], oligos: [{ name: "Modified-F", sequence: "acgt acgt", synthesisScale: "100 nmol", purification: "HPLC", modification5: "Phosphate", modification3: "", modificationInternal: "", notes: "Confirm feasibility" }], oligoShippingAddress: "123 Science Way, San Diego CA 92101 USA", oligoFormat: "Dry" });
+    const oligoKey = randomUUID();
+    const oligoCreated = await createOrder(db, "u1", oligo, oligoKey, 999999);
+    const oligoSaved = await db.order.findUniqueOrThrow({ where: { id: oligoCreated.id }, include: { samples: true } });
+    assert.equal(oligoSaved.service, "OLIGO");
+    assert.equal(oligoSaved.samples.length, 0);
+    assert.deepEqual(oligoSaved.oligoSnapshot, { items: oligo.oligos, shippingAddress: oligo.oligoShippingAddress, format: "Dry", searchNames: "Modified-F" });
+    assert.equal((oligoSaved.pricingSnapshot as { subtotalCents: number | null }).subtotalCents, null);
+    assert.equal((oligoSaved.pricingSnapshot as { pendingQuote: boolean }).pendingQuote, true);
+    const oligoMatches = await db.order.findMany({ where: orderFilterWhere(parseOrderFilters({ service: "OLIGO", q: "modified-f" })), select: { id: true } });
+    assert.deepEqual(oligoMatches, [{ id: oligoSaved.id }]);
+    assert.equal((await createOrder(db, "u1", oligo, oligoKey)).id, oligoSaved.id);
+    await assert.rejects(createOrder(db, "u1", { ...oligo, oligoShippingAddress: "Changed" }, oligoKey), SubmissionConflict);
     const initial = await getRateSchedule(db);
     const updated = await updateRateSchedule(db, { id: "test-admin", name: "Test Admin" }, { ...initial, rates: { ...initial.rates, "plasmid-plate": 650 }, reason: "Test rate change" });
     assert.equal(updated.revision, initial.revision + 1);
@@ -114,6 +129,68 @@ test("migration preserves legacy orders and new orders persist samples and react
     const largePlasmid = orderSchema.parse({ ...plasmid, samples: [{ ...plasmid.samples[0], templateLength: "12001" }] });
     const largeCreated = await createOrder(db, "u1", largePlasmid, randomUUID(), updated.revision);
     assert.equal(((await db.order.findUniqueOrThrow({ where: { id: largeCreated.id } })).pricingSnapshot as { subtotalCents: number }).subtotalCents, 1500);
+
+    const actor = { id: "test-admin", name: "Test Admin" };
+    assert.deepEqual(await getCustomerPricing(db, "u1"), { customerId: "u1", revision: 0, overrides: {} });
+    await db.user.create({ data: { id: "admin", name: "Admin", email: "admin@demo.local", role: "admin", firstName: "Test", lastName: "Admin", organization: "Test", labName: "Test" } });
+    for (const customerId of ["missing-user", "admin"]) {
+      await assert.rejects(updateCustomerPricing(db, actor, customerId, { revision: 0, overrides: { "plasmid-plate": 400 }, reason: "Invalid target" }), CustomerNotFound);
+    }
+    const custom = await updateCustomerPricing(db, actor, "u1", { revision: 0, overrides: { "plasmid-plate": 400 }, reason: "Agreed lab price" });
+    assert.equal(custom.revision, 1);
+    assert.deepEqual(await updateCustomerPricing(db, actor, "u1", { revision: 1, overrides: custom.overrides, reason: "No changes" }), custom);
+    assert.equal(await db.customerPricingChange.count(), 1);
+    await assert.rejects(updateCustomerPricing(db, actor, "u1", { revision: 0, overrides: {}, reason: "Stale edit" }), error => error instanceof CustomerPriceChanged && error.current.revision === 1);
+    const audit = await db.customerPricingChange.findFirstOrThrow();
+    assert.equal(audit.actorId, actor.id); assert.equal(audit.actorName, actor.name); assert.equal(audit.reason, "Agreed lab price");
+    assert.deepEqual(audit.previousOverrides, {}); assert.deepEqual(audit.overrides, { "plasmid-plate": 400 });
+    assert.equal((await getEffectiveRateSchedule(db, "u2")).rates["plasmid-plate"], 650);
+    assert.equal((await getEffectiveRateSchedule(db, "u1")).rates["plasmid-large-plate"], 1500);
+    const customOrderCount = await db.order.count();
+    await assert.rejects(createOrder(db, "u1", plasmid, randomUUID(), updated.revision, 0), error => error instanceof PriceChanged && error.schedule.customerRevision === 1 && error.schedule.rates["plasmid-plate"] === 400);
+    await assert.rejects(createOrder(db, "u1", plasmid, randomUUID(), updated.revision, 1, "u2"), AccountChanged);
+    assert.equal(await db.order.count(), customOrderCount);
+    const customKey = randomUUID();
+    const customOrder = await createOrder(db, "u1", plasmid, customKey, updated.revision, 1, "u1");
+    const customSaved = await db.order.findUniqueOrThrow({ where: { id: customOrder.id } });
+    assert.equal((customSaved.pricingSnapshot as { subtotalCents: number }).subtotalCents, 400);
+    assert.equal((customSaved.pricingSnapshot as { customerPricingRevision: number }).customerPricingRevision, 1);
+    assert.equal((customSaved.pricingSnapshot as { lines: { customPrice: boolean }[] }).lines[0].customPrice, true);
+    const otherCustomerOrder = await createOrder(db, "u2", plasmid, randomUUID(), updated.revision, 0, "u2");
+    assert.equal(((await db.order.findUniqueOrThrow({ where: { id: otherCustomerOrder.id } })).pricingSnapshot as { subtotalCents: number }).subtotalCents, 650);
+    const nextGlobal = await updateRateSchedule(db, actor, { ...updated, rates: { ...updated.rates, "plasmid-plate": 700, "plasmid-large-plate": 1600 }, reason: "Global update after custom pricing" });
+    const inherited = await getEffectiveRateSchedule(db, "u1");
+    assert.equal(inherited.rates["plasmid-plate"], 400); assert.equal(inherited.rates["plasmid-large-plate"], 1600);
+    await assert.rejects(createOrder(db, "u1", plasmid, randomUUID(), updated.revision, 1), PriceChanged);
+    const reset = await updateCustomerPricing(db, actor, "u1", { revision: 1, overrides: {}, reason: "Restore standard prices" });
+    assert.equal(reset.revision, 2); assert.deepEqual(reset.overrides, {});
+    assert.equal((await getEffectiveRateSchedule(db, "u1")).rates["plasmid-plate"], 700);
+    assert.equal((await db.customerPricing.findUniqueOrThrow({ where: { userId: "u1" } })).revision, 2);
+    assert.equal((await createOrder(db, "u1", plasmid, customKey, updated.revision, 0)).id, customOrder.id);
+    assert.deepEqual((await db.order.findUniqueOrThrow({ where: { id: customOrder.id } })).pricingSnapshot, customSaved.pricingSnapshot);
+    assert.equal((await createOrder(db, "u1", oligo, oligoKey, 99999, 99999)).id, oligoCreated.id);
+    const newOligo = await createOrder(db, "u1", oligo, randomUUID(), 99999, 99999);
+    assert.equal(((await db.order.findUniqueOrThrow({ where: { id: newOligo.id } })).pricingSnapshot as { pendingQuote: boolean }).pendingQuote, true);
+
+    // A racing price edit and order either preserve the reviewed snapshot or require re-review.
+    const race = await Promise.allSettled([
+      createOrder(db, "u1", plasmid, randomUUID(), nextGlobal.revision, 2, "u1"),
+      updateCustomerPricing(db, actor, "u1", { revision: 2, overrides: { "plasmid-plate": 300 }, reason: "Concurrent edit" }),
+    ]);
+    assert.equal(race[1].status, "fulfilled");
+    if (race[0].status === "fulfilled") {
+      const raceOrder = await db.order.findUniqueOrThrow({ where: { id: (race[0].value as { id: string }).id } });
+      assert.equal((raceOrder.pricingSnapshot as { subtotalCents: number }).subtotalCents, 700);
+      assert.equal((raceOrder.pricingSnapshot as { customerPricingRevision: number }).customerPricingRevision, 2);
+    } else assert.ok(race[0].reason instanceof PriceChanged);
+    assert.equal((await getCustomerPricing(db, "u1")).revision, 3);
+    assert.equal(await db.customerPricingChange.count({ where: { customerId: "u1" } }), 3);
+
+    // A failed audit write must roll back the rate row as well.
+    await db.customerPricingChange.create({ data: { customerId: "u2", revision: 1, actorId: actor.id, actorName: actor.name, reason: "Audit collision fixture", previousOverrides: {}, overrides: {} } });
+    await assert.rejects(updateCustomerPricing(db, actor, "u2", { revision: 0, overrides: { "plasmid-plate": 100 }, reason: "Must roll back" }));
+    assert.deepEqual(await getCustomerPricing(db, "u2"), { customerId: "u2", revision: 0, overrides: {} });
+    await db.customerPricingChange.deleteMany({ where: { customerId: "u2" } });
 
     // Replay this one additive migration against a populated legacy schedule in the disposable schema.
     const oldRates = Object.fromEntries(Object.entries(updated.rates).filter(([key]) => !key.startsWith("plasmid-large-")));

@@ -16,10 +16,11 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/o
   }
 
   const { id } = await context.params;
-  const order = await prisma.order.findUnique({ where: { id }, select: { id: true, status: true } });
+  const order = await prisma.order.findUnique({ where: { id }, select: { id: true, status: true, service: true } });
   if (!order) {
     return Response.json({ error: "Order not found." }, { status: 404 });
   }
+  if (order.service === "OLIGO") return Response.json({ error: "This oligo request is awaiting a quote and customer approval. Result upload cannot complete a quote-pending order." }, { status: 409 });
 
   const formData = await request.formData();
   const file = formData.get("file");

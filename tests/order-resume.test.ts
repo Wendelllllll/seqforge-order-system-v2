@@ -2,10 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { blankOrder } from "../src/lib/order-intake";
 import { DEFAULT_SCHEDULE } from "../src/lib/rate-schedule";
-import { hasOrderDraftChanges, ORDER_DRAFT_TTL, orderDraftKey, persistentOrderDraftKey, persistOrderDraft, restoreOrderDraft, orderLoginUrl, readSavedOrder, safeOrderReturn } from "../src/lib/order-resume";
+import { blankOligo } from "../src/lib/oligo-entry";
+import { emailVerificationUrl, safeAuthReturn, hasOrderDraftChanges, ORDER_DRAFT_TTL, orderDraftKey, persistentOrderDraftKey, persistOrderDraft, restoreOrderDraft, orderLoginUrl, readSavedOrder, safeOrderReturn } from "../src/lib/order-resume";
 
 const now = 1_800_000_000_000;
 const saved = (extra = {}) => JSON.stringify({ version: 1, savedAt: now, ownerId: null, draft: blankOrder(), ...extra });
+
+test("Oligo drafts preserve unfinished sequences, imports and outbound delivery across sign-in", () => {
+  const disk = memoryStorage();
+  const tab = memoryStorage();
+  const draft = { ...blankOrder(), service: "OLIGO" as const, submissionMode: "Oligo modified" as const, samples: [], oligos: [{ ...blankOligo(), name: "Half filled", sequence: "ac gt /unfinished", modification5: "Biotin" }], oligoShippingAddress: "Room", oligoFormat: "Resuspended" as const };
+  tab.setItem(orderDraftKey("Oligo modified"), saved({ draft, bulkText: "Name\tSequence\nPending\tacg", oligoPendingImport: [{ ...blankOligo(), name: "Pending", sequence: "ACG" }] }));
+  const restored = restoreOrderDraft(disk, tab, "Oligo modified", "customer-1", now)!;
+  assert.deepEqual(restored.draft, draft);
+  assert.equal(restored.oligoPendingImport?.[0].name, "Pending");
+  assert.equal(restoreOrderDraft(disk, memoryStorage(), "Oligo modified", "customer-1", now + 1000)?.draft.oligoShippingAddress, "Room");
+  assert.equal(restoreOrderDraft(disk, memoryStorage(), "Oligo standard", "customer-1", now), null);
+  assert.equal(restoreOrderDraft(disk, memoryStorage(), "Oligo modified", "customer-2", now), null);
+  assert.equal(readSavedOrder(saved({ draft: { ...draft, service: "SANGER" } }), "Oligo modified", null, now), null);
+  assert.equal(orderLoginUrl("Oligo standard"), "/login?next=%2Forders%2Fnew%3Fservice%3Doligo%26type%3Dstandard");
+  assert.equal(orderLoginUrl("Oligo modified"), "/login?next=%2Forders%2Fnew%3Fservice%3Doligo%26type%3Dmodified");
+});
 
 test("Drafts retain the quoted schedule and unacknowledged price notice across login and reload", () => {
   const disk = memoryStorage();
@@ -134,5 +151,32 @@ test("Authentication return URLs allow only known order-entry routes", () => {
   for (const bad of ["//evil.example", "https://evil.example/orders/new", "/orders/newer", "/orders/new/../../admin", "/orders/new?service=evil", "/orders/new?service=sanger&type=evil", "/orders/new\\evil", ["/orders/new"]]) assert.equal(safeOrderReturn(bad), null);
   assert.equal(safeOrderReturn("/orders/new?service=sanger&type=pre-mixed&next=https://evil.example"), "/orders/new?service=sanger&type=pre-mixed");
   assert.equal(safeOrderReturn("/orders/new"), "/orders/new");
-  assert.equal(safeOrderReturn(new URL(orderLoginUrl("Ready to load"), "http://localhost").searchParams.get("next")), "/orders/new?service=sanger&type=ready-to-load");
+  assert.equal(safeOrderReturn(new URL(orderLoginUrl("Ready to load"), "http://localhost").searchParams.get("next")), "/orders/new?service=sanger&retired=ready-to-load");
+  assert.equal(safeOrderReturn("/orders/new?service=sanger&type=ready-to-load"), "/orders/new?service=sanger&retired=ready-to-load");
+});
+
+test("Verification return links preserve the order service and never permit an external destination", () => {
+  const order = "/orders/new?service=oligo&type=modified";
+  const verify = emailVerificationUrl(order);
+  assert.equal(safeAuthReturn(verify), verify);
+  assert.equal(safeAuthReturn(`${verify}&verified=1&email=someone@example.com`), verify);
+  assert.equal(safeAuthReturn(order), order);
+  for (const value of ["https://evil.example", "//evil.example", "/verify-email/../admin", "/verify-email\\evil", "/verify-email-extra", [verify]]) {
+    assert.equal(safeAuthReturn(value), null);
+  }
+  assert.equal(safeAuthReturn("/verify-email?next=https://evil.example"), emailVerificationUrl("/dashboard"));
+  assert.equal(emailVerificationUrl("//evil.example"), "/verify-email?next=%2Fdashboard");
+});
+
+test("A verification link opened in another tab restores the signed-in draft from persistent storage", () => {
+  const disk = memoryStorage();
+  const originalTab = memoryStorage();
+  const state = readSavedOrder(saved({ draft: { ...blankOrder(), orderName: "Keep while verifying" }, review: true, step: "details", submissionKey: "123e4567-e89b-42d3-a456-426614174000" }), "Standard", "customer-1", now)!;
+  const raw = persistOrderDraft(disk, "Standard", "customer-1", state, now);
+  originalTab.setItem(orderDraftKey("Standard"), raw);
+  const resumed = restoreOrderDraft(disk, memoryStorage(), "Standard", "customer-1", now)!;
+  assert.equal(resumed.draft.orderName, "Keep while verifying");
+  assert.equal(resumed.review, true);
+  assert.equal(resumed.submissionKey, state.submissionKey);
+  assert.equal(restoreOrderDraft(disk, memoryStorage(), "Standard", "customer-2", now), null);
 });

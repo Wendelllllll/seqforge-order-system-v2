@@ -14,7 +14,7 @@ export async function PUT(request: Request) {
     input = JSON.parse(text);
   } catch { return Response.json({ error: "Send valid JSON." }, { status: 400 }); }
   const parsed = priceUpdateSchema.safeParse(input);
-  if (!parsed.success) return Response.json({ error: "Enter all eight USD rates in cents (0–1,000,000) and a reason for the change." }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Enter all current rate fields in USD cents (0–1,000,000) and a reason for the change." }, { status: 400 });
   try {
     return Response.json(await updateRateSchedule(prisma, session.user, parsed.data));
   } catch (error) {

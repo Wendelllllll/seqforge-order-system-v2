@@ -6,11 +6,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { emailVerificationUrl, safeOrderReturn } from "@/lib/order-resume";
 
 export function LoginForm({ next = null }: { next?: string | null }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const registrationReturn = next?.startsWith("/verify-email?")
+    ? safeOrderReturn(new URLSearchParams(next.split("?")[1]).get("next"))
+    : safeOrderReturn(next);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,7 +51,7 @@ export function LoginForm({ next = null }: { next?: string | null }) {
       </button>
       <p className="text-center text-sm text-slate-600">
         Need an account?{" "}
-        <Link href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"} className="font-semibold text-cyan-700 hover:text-cyan-800">
+        <Link href={registrationReturn ? `/register?next=${encodeURIComponent(registrationReturn)}` : "/register"} className="font-semibold text-cyan-700 hover:text-cyan-800">
           Register
         </Link>
       </p>
@@ -56,7 +60,6 @@ export function LoginForm({ next = null }: { next?: string | null }) {
 }
 
 export function RegisterForm({ next = null }: { next?: string | null }) {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -92,9 +95,7 @@ export function RegisterForm({ next = null }: { next?: string | null }) {
       return;
     }
 
-    if (next) { window.location.assign(next); return; }
-    router.push("/dashboard");
-    router.refresh();
+    window.location.assign(emailVerificationUrl(next));
   }
 
   return (

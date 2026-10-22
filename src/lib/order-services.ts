@@ -24,8 +24,8 @@ export const ORDER_SERVICES: readonly OrderService[] = [
     description: "Build the DNA oligos you need for your next experiment.",
     caption: "Standard DNA · Modified DNA",
     options: [
-      { id: "standard", name: "Standard DNA oligos", description: "Unmodified DNA oligonucleotides for primers and other research applications." },
-      { id: "modified", name: "Modified DNA oligos", description: "DNA oligos with requested 5′, 3′, or internal modifications." },
+      { id: "standard", name: "Standard DNA oligos", description: "Unmodified DNA oligonucleotides for primers and other research applications.", submissionMode: "Oligo standard" },
+      { id: "modified", name: "Modified DNA oligos", description: "DNA oligos with requested 5′, 3′, or internal modifications.", submissionMode: "Oligo modified" },
     ],
   },
   {
@@ -41,11 +41,10 @@ export const ORDER_SERVICES: readonly OrderService[] = [
     name: "Sanger sequencing",
     shortName: "Sanger",
     description: "Read a targeted DNA region with the sample setup that fits your workflow.",
-    caption: "Standard · Pre-mixed · Ready to load",
+    caption: "Standard · Pre-mixed",
     options: [
       { id: "standard", name: "Standard", description: "Supply your DNA and primers separately.", submissionMode: "Standard" },
       { id: "pre-mixed", name: "Pre-mixed", description: "Send DNA and primer already mixed together.", submissionMode: "Pre-mixed" },
-      { id: "ready-to-load", name: "Ready to load", description: "Send prepared sequencing reactions, ready for loading.", submissionMode: "Ready to load" },
     ],
   },
 ];

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { orderDefaultsSchema } from "@/lib/order-defaults";
 import { OrderPricing } from "@/components/order-pricing";
 import type { ReactionDraft } from "@/lib/order-intake";
+import { readOligoSnapshot, type OligoDraft } from "@/lib/oligo-schema";
 
 type ManifestSample = {
   sampleKey: string; sampleName: string; tubeLabel: string; plateLabel: string; well: string;
@@ -14,9 +15,11 @@ export type ManifestOrder = {
   orderName: string; orderNumber?: string; poNumber: string | null; specialInstructions: string | null;
   priority: string; container: string; submissionMode: string; intakeVersion?: number;
   samples: ManifestSample[]; pricingSnapshot?: unknown; fulfillmentSnapshot?: unknown;
+  oligoSnapshot?: unknown; oligos?: OligoDraft[]; oligoShippingAddress?: string; oligoFormat?: string;
 };
 
 export function OrderManifest({ order }: { order: ManifestOrder }) {
+  if (order.service === "OLIGO") return <OligoManifest order={order} />;
   const plasmid = order.service === "WHOLE_PLASMID";
   const readyToLoad = order.submissionMode === "Ready to load";
   const primerName = (name: string) => readyToLoad && name === "Included in mix" ? "Not specified (optional)" : name;
@@ -80,6 +83,24 @@ export function OrderManifest({ order }: { order: ManifestOrder }) {
         </tr>)}</tbody>
       </table>}
     </div>
+    <div className="border-t border-slate-200 p-5 text-sm"><strong>Instructions</strong><p className="mt-2 whitespace-pre-wrap">{order.specialInstructions || "No additional instructions."}</p></div>
+    <OrderPricing snapshot={order.pricingSnapshot} historical={Boolean(order.orderNumber)} />
+  </section>;
+}
+
+function OligoManifest({ order }: { order: ManifestOrder }) {
+  const oligo = readOligoSnapshot(order.oligoSnapshot ?? { items: order.oligos, shippingAddress: order.oligoShippingAddress, format: order.oligoFormat });
+  const parsed = orderDefaultsSchema.safeParse(order.fulfillmentSnapshot);
+  const details = parsed.success ? parsed.data : null;
+  return <section className="panel submission-manifest">
+    <div className="panel-heading"><div><p className="eyebrow">Oligo synthesis request</p><h2 className="mt-1 text-lg font-bold">{order.orderName || "Untitled order"}</h2>{order.orderNumber && <p className="mt-1 font-mono text-sm">{order.orderNumber}</p>}</div><span className="metric-pill">{oligo?.items.length ?? 0} oligos · {oligo?.items.reduce((sum, item) => sum + item.sequence.length, 0) ?? 0} bases</span></div>
+    <div className="space-y-3 border-b border-slate-200 p-5 text-sm">
+      <p><strong>Service:</strong> {order.submissionMode === "Oligo modified" ? "Modified DNA oligos" : "Standard DNA oligos"} · Individual tubes</p>
+      <p><strong>Requested format:</strong> {oligo?.format || "Not recorded"} · Format and any resuspension details are subject to lab confirmation.</p>
+      <p><strong>PO / reference:</strong> {order.poNumber || "Not provided"}</p>
+      <div className="grid gap-4 sm:grid-cols-2"><div><p className="whitespace-pre-wrap"><strong>Deliver oligos to:</strong><br />{oligo?.shippingAddress || "Not recorded"}</p>{details && <p className="mt-2"><strong>Contact:</strong> {details.contactName} · {details.contactPhone}</p>}</div>{details && <div><p><strong>Bill to:</strong> {details.billingOrganization}</p><p>{details.billingContactName} · {details.billingEmail}</p><p className="whitespace-pre-wrap">{details.billingAddress}</p><p><strong>PI:</strong> {details.piName || "Not provided"}</p><p><strong>Payment method:</strong> {details.paymentMethod} · No payment collected</p></div>}</div>
+    </div>
+    {oligo ? <div className="overflow-x-auto"><table className="data-table min-w-[640px]"><caption className="px-5 py-4 text-left text-sm font-bold">Requested synthesis specifications · sequences written 5′ to 3′</caption><thead><tr><th>Oligo</th><th>DNA sequence</th><th>Scale / purification</th><th>Modifications / notes</th></tr></thead><tbody>{oligo.items.map((item, i) => <tr key={i}><td><strong>{item.name}</strong><p className="mt-1 text-xs text-slate-500">{item.sequence.length} bases</p></td><td className="max-w-sm break-all font-mono text-xs">5′–{item.sequence}–3′</td><td>{item.synthesisScale}<br />{item.purification}</td><td className="max-w-xs whitespace-pre-wrap break-words"><p>5′: {item.modification5 || "None"}</p><p>3′: {item.modification3 || "None"}</p><p>Internal: {item.modificationInternal || "None"}</p>{item.notes && <p className="mt-2">{item.notes}</p>}</td></tr>)}</tbody></table></div> : <p className="p-5 text-sm text-red-700">Oligo specifications could not be read. Contact the lab before processing.</p>}
     <div className="border-t border-slate-200 p-5 text-sm"><strong>Instructions</strong><p className="mt-2 whitespace-pre-wrap">{order.specialInstructions || "No additional instructions."}</p></div>
     <OrderPricing snapshot={order.pricingSnapshot} historical={Boolean(order.orderNumber)} />
   </section>;

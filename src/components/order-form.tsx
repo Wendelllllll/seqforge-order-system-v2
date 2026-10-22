@@ -7,10 +7,10 @@ import { useOrderDraft } from "@/components/use-order-draft";
 import { OrderDraftChoice } from "@/components/order-draft-choice";
 import { PlasmidSampleGrid } from "@/components/plasmid-sample-grid";
 import { newPlasmidSample, parseMappedPlasmid, plasmidTemplate } from "@/lib/whole-plasmid";
-import { orderLoginUrl, type OrderResumeState } from "@/lib/order-resume";
+import { emailVerificationUrl, orderLoginUrl, orderReturnPath, type OrderResumeState } from "@/lib/order-resume";
 import { SangerOrderSummary } from "@/components/sanger-order-summary";
 import { formatMoney, priceOrder } from "@/lib/pricing";
-import { DEFAULT_SCHEDULE, plasmidRateFor, RATE_ITEMS, rateScheduleSchema, type RateSchedule } from "@/lib/rate-schedule";
+import { ACTIVE_RATE_ITEMS, DEFAULT_SCHEDULE, plasmidRateFor, rateScheduleSchema, type RateSchedule } from "@/lib/rate-schedule";
 import { OrderManifest } from "@/components/order-manifest";
 import { Field, SelectField, TextField } from "@/components/sample-editor";
 import { SangerSampleGrid } from "@/components/sanger-sample-grid";
@@ -27,6 +27,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
   const router = useRouter();
   const [schedule, setSchedule] = useState(initialSchedule);
   const [priceNotice, setPriceNotice] = useState("");
+  const [accountChanged, setAccountChanged] = useState(false);
   const [draft, setDraft] = useState<OrderDraft>(() => ({ ...blankOrder(), service: initialSubmissionMode === "Whole plasmid" ? "WHOLE_PLASMID" : "SANGER", submissionMode: initialSubmissionMode, fulfillment: defaults, samples: [initialSubmissionMode === "Whole plasmid" ? newPlasmidSample([], "Tubes") : newSangerSample([], "Tubes", initialSubmissionMode)] }));
   const [step, setStep] = useState<"samples" | "details">("samples");
   const [entryMethod, setEntryMethod] = useState("manual");
@@ -50,9 +51,8 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
   const alertRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const standard = draft.submissionMode === "Standard";
-  const readyToLoad = draft.submissionMode === "Ready to load";
   const wholePlasmid = draft.service === "WHOLE_PLASMID";
-  const sampleStage = wholePlasmid ? "Plasmid samples" : readyToLoad ? "Prepared reactions" : "Samples & primers";
+  const sampleStage = wholePlasmid ? "Plasmid samples" : "Samples & primers";
   const namedSamples = draft.samples.filter(sample => sample.sampleName.trim());
   const count = namedSamples.length;
   const reactions = reactionCount(namedSamples);
@@ -63,11 +63,11 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     step, mappingSheet, pasteSource, imported: false, sampleCount: 1,
   };
   const resume = useOrderDraft(initialSubmissionMode, userId, resumeState, saved => {
-    // Older Ready to load drafts retained CSV text even after applying it.
+    // Legacy drafts retained CSV text even after applying it.
     const oldImport = saved.entryMethod === "import";
-    const previousSchedule = saved.pricingSchedule || DEFAULT_SCHEDULE;
-    const changed = previousSchedule.revision !== initialSchedule.revision || RATE_ITEMS.some(item => previousSchedule.rates[item.key] !== initialSchedule.rates[item.key]);
-    setPriceNotice(changed ? `The price schedule changed since this draft was saved. ${saved.draft.service === "WHOLE_PLASMID" ? "Whole Plasmid prices depend on expected size. " : ""}Review the updated rates and total before submitting.` : saved.priceNotice || "");
+    const previousSchedule: RateSchedule = saved.pricingSchedule || DEFAULT_SCHEDULE;
+    const changed = previousSchedule.revision !== initialSchedule.revision || (previousSchedule.customerRevision ?? 0) !== (initialSchedule.customerRevision ?? 0) || ACTIVE_RATE_ITEMS.some(item => previousSchedule.rates[item.key] !== initialSchedule.rates[item.key]);
+    setPriceNotice(changed ? `The prices for this order changed since the draft was saved or you signed in. ${saved.draft.service === "WHOLE_PLASMID" ? "Whole Plasmid prices depend on expected size. " : ""}Review your account's current rates and total before submitting.` : saved.priceNotice || "");
     setSchedule(initialSchedule);
     setDraft(saved.draft); setShareText(saved.shareText); setEntryMethod(oldImport ? saved.imported ? "manual" : "paste" : saved.entryMethod); setBulkText(oldImport && saved.imported ? "" : saved.bulkText);
     setPendingImport(oldImport && saved.imported ? null : saved.pendingImport); setSubmissionKey(saved.submissionKey);
@@ -111,13 +111,22 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function submitOrder() {
-    if (!review || submitting.current || priceNotice) return;
+    if (!review || submitting.current || priceNotice || accountChanged) return;
     if (!userId) { signInToContinue(); return; }
     submitting.current = true; const key = submissionKey || crypto.randomUUID(); setSubmissionKey(key); setLoading(true); setErrors([]);
     try {
-      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key, "X-Pricing-Revision": String(schedule.revision) }, body: JSON.stringify(review) });
+      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key, "X-Pricing-Revision": String(schedule.revision), "X-Customer-Pricing-Revision": String(schedule.customerRevision ?? 0), "X-Pricing-Customer-Id": userId }, body: JSON.stringify(review) });
       if (response.status === 401) { signInToContinue(key); return; }
       const payload = await response.json();
+      if (response.status === 403 && payload.code === "EMAIL_NOT_VERIFIED") {
+        if (resume.save({ ...resumeState, submissionKey: key })) window.location.assign(emailVerificationUrl(orderReturnPath(initialSubmissionMode)));
+        return;
+      }
+      if (response.status === 409 && payload.code === "ACCOUNT_CHANGED") {
+        setAccountChanged(true);
+        showErrors(["The signed-in account changed in another tab. Reload to use that account's own draft and pricing, or sign back in to the account that started this order. This draft remains saved for its original account."]);
+        return;
+      }
       if (response.status === 409 && payload.code === "PRICE_CHANGED") {
         const latest = rateScheduleSchema.parse(payload.schedule);
         const before = priceOrder(review, schedule); const after = priceOrder(review, latest);
@@ -168,7 +177,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     const a = document.createElement("a"); a.href = url; a.download = `seqforge-${wholePlasmid ? "whole-plasmid-" : ""}${draft.container.toLowerCase()}-template.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const errorPanel = errors.length ? <div ref={alertRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p className="font-bold">Please check these details</p><ul className="mt-2 list-disc space-y-1 pl-5">{errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div> : null;
-  const summary = <div className="sanger-order-summary"><div><span className="eyebrow">{wholePlasmid ? "Whole Plasmid Sequencing" : "Sanger sequencing"}</span><h2>{wholePlasmid ? "Purified plasmid DNA" : draft.submissionMode}</h2><p>{wholePlasmid ? `One plasmid sample per tube or occupied well. ≤12 kb: ${formatMoney(plasmidRateFor(draft.container, false, schedule))}; >12 kb: ${formatMoney(plasmidRateFor(draft.container, true, schedule))} per sample. No sequencing primers required.` : standard ? "DNA and primers supplied separately. Add one reaction for each primer." : readyToLoad ? "Send completed sequencing reactions, ready for loading. One tube or occupied well is one reaction." : "DNA + one primer in each tube or well. Send separate mixes for additional primers."}</p></div><div className="sanger-counts" aria-live="polite"><strong><b className="sanger-count-value" key={count}>{count}</b><span>{draft.container === "Plate" ? "occupied wells" : wholePlasmid ? "sample tubes" : readyToLoad ? "reaction tubes" : "DNA / mix tubes"}</span></strong>{!wholePlasmid && <strong><b className="sanger-count-value" key={reactions}>{reactions}</b><span>reactions</span></strong>}</div></div>;
+  const summary = <div className="sanger-order-summary"><div><span className="eyebrow">{wholePlasmid ? "Whole Plasmid Sequencing" : "Sanger sequencing"}</span><h2>{wholePlasmid ? "Purified plasmid DNA" : draft.submissionMode}</h2><p>{wholePlasmid ? `One plasmid sample per tube or occupied well. ≤12 kb: ${formatMoney(plasmidRateFor(draft.container, false, schedule))}; >12 kb: ${formatMoney(plasmidRateFor(draft.container, true, schedule))} per sample. No sequencing primers required.` : standard ? "DNA and primers supplied separately. Add one reaction for each primer." : "DNA + one primer in each tube or well. Send separate mixes for additional primers."}</p></div><div className="sanger-counts" aria-live="polite"><strong><b className="sanger-count-value" key={count}>{count}</b><span>{draft.container === "Plate" ? "occupied wells" : wholePlasmid ? "sample tubes" : "DNA / mix tubes"}</span></strong>{!wholePlasmid && <strong><b className="sanger-count-value" key={reactions}>{reactions}</b><span>reactions</span></strong>}</div></div>;
 
   if (!resume.ready) return <p role="status" className="panel p-6 text-sm">Preparing your order…</p>;
   if (resume.pendingDraft) return <OrderDraftChoice saved={resume.pendingDraft} onContinue={resume.continueDraft} onRestart={resume.startFresh} error={resume.storageError} />;
@@ -179,7 +188,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     <p className="text-sm text-slate-600">{wholePlasmid ? "Check your plasmid names, physical labels and sample count." : "Check your physical labels, sample count and reaction count."} The order is saved only when you confirm below.</p>
     <OrderManifest order={{ ...review, fulfillmentSnapshot: { ...review.fulfillment, sharedResultEmails: review.sharedResultEmails }, pricingSnapshot: priceOrder(review, schedule) }} />
     {priceNotice && <div role="alert" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950"><p className="font-bold">Please confirm the updated price</p><p>{priceNotice}</p><label className="flex items-center gap-3"><input type="checkbox" checked={false} onChange={() => setPriceNotice("")} />I have reviewed and accept the updated sequencing price.</label></div>}
-    {errorPanel}<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }} className="button-secondary">Back to edit samples</button><button type="button" disabled={loading} onClick={() => { setReview(null); setErrors([]); }} className="button-secondary">Edit delivery & billing</button><button type="button" disabled={loading || !!priceNotice} onClick={submitOrder} className="button-primary">{loading && <LoaderCircle className="h-4 w-4 animate-spin" />}{userId ? "Confirm and submit order" : "Sign in to submit order"}</button></div>
+    {errorPanel}{accountChanged && <button type="button" className="button-secondary" onClick={() => window.location.reload()}>Reload for current account</button>}<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }} className="button-secondary">Back to edit samples</button><button type="button" disabled={loading} onClick={() => { setReview(null); setErrors([]); }} className="button-secondary">Edit delivery & billing</button><button type="button" disabled={loading || !!priceNotice || accountChanged} onClick={submitOrder} className="button-primary">{loading && <LoaderCircle className="h-4 w-4 animate-spin" />}{userId ? "Confirm and submit order" : "Sign in to submit order"}</button></div>
   </div>;
 
   return <form method="post" noValidate onSubmit={reviewOrder} className="sanger-order-form space-y-6">
@@ -191,19 +200,19 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     {step === "samples" ? <>
       <section className="panel space-y-5 p-5 sm:p-6">
         <div className="grid gap-6 md:grid-cols-2"><TextField label="Order name (optional)" hint="For your own reference. Each order receives a unique order number." value={draft.orderName} onChange={value => update("orderName", value)} maxLength={120} /><fieldset><legend className="field-label mb-2">Sample format</legend><div className="flex gap-3">{CONTAINERS.map(container => <label key={container} className={`sanger-format ${draft.container === container ? "selected" : ""}`}><input type="radio" name="container" checked={draft.container === container} onChange={() => changeContainer(container)} /> {container === "Plate" ? "96-well plates" : "Tubes / 8-tube strips"}</label>)}</div></fieldset></div>
-        <p className="text-sm text-slate-500">{draft.container === "Plate" ? "New wells run A1 → H1, then A2 → H2. Explicit imported well positions are preserved." : "Match tube labels to your physical samples. Sample names identify your results."} {wholePlasmid ? "Submit purified plasmid DNA. Enter expected size in base pairs (12 kb = 12,000 bp) to calculate the correct price. Size and concentration may be left blank if unknown; missing sizes use a base estimate until the lab confirms size and price." : readyToLoad ? "These must be completed sequencing reactions. Primer names and original DNA details are optional records; add preparation information in the notes." : "Length and concentration may be left blank if unknown; lab review may be needed."}</p>
+        <p className="text-sm text-slate-500">{draft.container === "Plate" ? "New wells run A1 → H1, then A2 → H2. Explicit imported well positions are preserved." : "Match tube labels to your physical samples. Sample names identify your results."} {wholePlasmid ? "Submit purified plasmid DNA. Enter expected size in base pairs (12 kb = 12,000 bp) to calculate the correct price. Size and concentration may be left blank if unknown; missing sizes use a base estimate until the lab confirms size and price." : "Length and concentration may be left blank if unknown; lab review may be needed."}</p>
       </section>
       <section className="panel overflow-hidden">
         <div className="sanger-entry-heading"><div><p className="eyebrow">Your sample table</p><h2>{sampleStage}</h2></div><div className="flex flex-wrap gap-2" aria-label="Sample entry method"><button type="button" className={entryMethod === "manual" ? "button-primary" : "button-secondary"} onClick={() => setEntryMethod("manual")}>Enter samples</button><button type="button" className={entryMethod === "paste" ? "button-primary" : "button-secondary"} onClick={() => setEntryMethod("paste")}><ClipboardPaste size={16} /> Paste from Excel</button></div></div>
         {entryMethod === "paste" && <div className="sanger-paste space-y-4">
           <p>Copy cells from Excel and paste below. No file conversion needed.</p>
-          <p className="text-sm text-slate-600">CSV uploads and pasted cells both use column confirmation. Match your columns and ignore extras. {wholePlasmid ? "Each row is one plasmid sample. No primer columns are needed." : standard ? "Confirm primer source. Separate multiple primer names with semicolons." : readyToLoad ? "Confirm the sequencing reactions are ready for loading. Each row is one tube or occupied well; primer names are optional." : "Confirm DNA and primer are mixed. Each row is one pre-mixed tube or well; primer names are optional."}</p>
-          <Field label="Excel cells"><textarea className="field-input min-h-36 font-mono" value={bulkText} onChange={e => { importRevision.current++; setBulkText(e.target.value); setMappingSheet(null); setPasteSource(""); setPendingImport(null); setImportErrors([]); }} placeholder={wholePlasmid ? "Sample name\tTube label\tLength (bp)\tConcentration\nPlasmid-1\tTube-1\t5000\t100" : readyToLoad ? "Sample name\tTube label\tPrimer\nReaction-1\tTube-1\tT7" : "Sample name\tLength (bp)\tConcentration\tPrimer\nClone-1\t3200\t100\tT7"} /></Field>
+          <p className="text-sm text-slate-600">CSV uploads and pasted cells both use column confirmation. Match your columns and ignore extras. {wholePlasmid ? "Each row is one plasmid sample. No primer columns are needed." : standard ? "Confirm primer source. Separate multiple primer names with semicolons." : "Confirm DNA and primer are mixed. Each row is one pre-mixed tube or well; primer names are optional."}</p>
+          <Field label="Excel cells"><textarea className="field-input min-h-36 font-mono" value={bulkText} onChange={e => { importRevision.current++; setBulkText(e.target.value); setMappingSheet(null); setPasteSource(""); setPendingImport(null); setImportErrors([]); }} placeholder={wholePlasmid ? "Sample name\tTube label\tLength (bp)\tConcentration\nPlasmid-1\tTube-1\t5000\t100" : "Sample name\tLength (bp)\tConcentration\tPrimer\nClone-1\t3200\t100\tT7"} /></Field>
           <div className="flex flex-wrap gap-3"><button type="button" className="button-primary" disabled={!bulkText.trim()} onClick={() => prepareMapping()}>Match columns</button><button type="button" className="button-secondary" onClick={() => { importRevision.current++; setBulkText(""); setMappingSheet(null); setPasteSource(""); setPendingImport(null); setImportErrors([]); }}>Discard paste</button></div>
           <details><summary className="cursor-pointer text-sm font-semibold">Upload CSV / TSV instead</summary><div className="mt-3 flex flex-wrap items-center gap-4"><input aria-label="Upload sample file" type="file" accept=".csv,.tsv,.txt" onChange={e => { void readFile(e.target.files?.[0]); e.target.value = ""; }} /><button type="button" className="button-secondary" onClick={downloadTemplate}>Download blank CSV template</button></div></details>
-          {mappingSheet && <SangerColumnMapper sheet={mappingSheet} source={pasteSource} container={draft.container} standard={standard} readyToLoad={readyToLoad} wholePlasmid={wholePlasmid} onChange={sheet => { importRevision.current++; setMappingSheet(sheet); setPendingImport(null); setImportErrors([]); }} onSourceChange={source => { importRevision.current++; setPasteSource(source); setPendingImport(null); setImportErrors([]); }} onPreview={previewImport} />}
+          {mappingSheet && <SangerColumnMapper sheet={mappingSheet} source={pasteSource} container={draft.container} standard={standard} wholePlasmid={wholePlasmid} onChange={sheet => { importRevision.current++; setMappingSheet(sheet); setPendingImport(null); setImportErrors([]); }} onSourceChange={source => { importRevision.current++; setPasteSource(source); setPendingImport(null); setImportErrors([]); }} onPreview={previewImport} />}
           {importErrors.length > 0 && <ul role="alert" className="max-h-48 list-disc overflow-auto rounded-lg bg-red-50 p-4 pl-8 text-sm text-red-800">{importErrors.map((error, i) => <li key={i}>{error}</li>)}</ul>}
-          {pendingImport && <div className="sanger-paste-preview"><strong>{pendingImport.length} samples{!wholePlasmid && <> · {reactionCount(pendingImport)} reactions</>}</strong><p className="mt-2 text-sm">Check generated labels against your tubes or plate. Applying replaces or appends exactly as selected below.</p><ul className="my-3 max-h-44 overflow-auto text-sm">{pendingImport.map(sample => <li key={sample.sampleKey}>{draft.container === "Plate" ? `${sample.plateLabel} / ${sample.well}` : sample.tubeLabel} · {sample.sampleName} · {wholePlasmid ? `${sample.templateLength || "Unknown"} bp · ${sample.concentration || "Unknown"} ng/µL` : readyToLoad ? `Completed reaction · Primer: ${sample.reactions[0].primerName === "Included in mix" ? "not specified" : sample.reactions[0].primerName}` : <>{sample.reactions.map(r => `${r.primerName} (${r.primerSource})`).join("; ")} · {sample.templateLength || "Unknown"} bp · {sample.concentration || "Unknown"} ng/µL</>}</li>)}</ul><div className="flex flex-wrap gap-3"><button type="button" className="button-primary" onClick={() => applyImport(false)}>Replace sample table</button>{draft.samples.length > 0 && <button type="button" className="button-secondary" onClick={() => applyImport(true)}>Append to sample table</button>}</div></div>}
+          {pendingImport && <div className="sanger-paste-preview"><strong>{pendingImport.length} samples{!wholePlasmid && <> · {reactionCount(pendingImport)} reactions</>}</strong><p className="mt-2 text-sm">Check generated labels against your tubes or plate. Applying replaces or appends exactly as selected below.</p><ul className="my-3 max-h-44 overflow-auto text-sm">{pendingImport.map(sample => <li key={sample.sampleKey}>{draft.container === "Plate" ? `${sample.plateLabel} / ${sample.well}` : sample.tubeLabel} · {sample.sampleName} · {wholePlasmid ? `${sample.templateLength || "Unknown"} bp · ${sample.concentration || "Unknown"} ng/µL` : <>{sample.reactions.map(r => `${r.primerName} (${r.primerSource})`).join("; ")} · {sample.templateLength || "Unknown"} bp · {sample.concentration || "Unknown"} ng/µL</>}</li>)}</ul><div className="flex flex-wrap gap-3"><button type="button" className="button-primary" onClick={() => applyImport(false)}>Replace sample table</button>{draft.samples.length > 0 && <button type="button" className="button-secondary" onClick={() => applyImport(true)}>Append to sample table</button>}</div></div>}
         </div>}
         {message && <p role="status" className="px-6 py-3 text-sm text-emerald-800">{message}</p>}
         {wholePlasmid ? <PlasmidSampleGrid samples={draft.samples} container={draft.container} issues={fieldIssues} onChange={samples => update("samples", samples)} /> : <SangerSampleGrid samples={draft.samples} mode={draft.submissionMode} container={draft.container} issues={fieldIssues} onChange={samples => update("samples", samples)} />}

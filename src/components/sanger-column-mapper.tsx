@@ -4,8 +4,8 @@ import { MAPPING_FIELDS, suggestMapping, type MappingSheet, type MappingSource }
 import type { OrderDraft } from "@/lib/order-intake";
 import { PLASMID_MAPPING_FIELDS } from "@/lib/whole-plasmid";
 
-export function SangerColumnMapper({ sheet, source, container, standard, readyToLoad = false, wholePlasmid = false, onChange, onSourceChange, onPreview }: {
-  sheet: MappingSheet; source: MappingSource; container: OrderDraft["container"]; standard: boolean; readyToLoad?: boolean; wholePlasmid?: boolean;
+export function SangerColumnMapper({ sheet, source, container, standard, wholePlasmid = false, onChange, onSourceChange, onPreview }: {
+  sheet: MappingSheet; source: MappingSource; container: OrderDraft["container"]; standard: boolean; wholePlasmid?: boolean;
   onChange: (sheet: MappingSheet) => void; onSourceChange: (source: MappingSource) => void; onPreview: () => void;
 }) {
   const examples = sheet.rows.slice(sheet.hasHeader ? 1 : 0, sheet.hasHeader ? 4 : 3);
@@ -26,7 +26,7 @@ export function SangerColumnMapper({ sheet, source, container, standard, readyTo
       <option value="column">Use the Primer source column for each row</option>
       <option value="primer-columns">Use My primers / SeqForge Primers columns (old template)</option>
     </select><span className="mt-2 block text-xs text-slate-500">T7 is a primer name, not a source. Select whether you supply it or use SeqForge stock. To override a source column, first map it to Ignore.</span></label>
-      : <label className="flex items-start gap-2 rounded-lg bg-teal-50 p-3 text-sm"><input type="checkbox" className="mt-1" checked={source === "Included in mix"} onChange={event => onSourceChange(event.target.checked ? "Included in mix" : "")} />{readyToLoad ? "I confirm each tube / well contains one completed sequencing reaction, ready for loading." : "I confirm DNA and one sequencing primer are already mixed in each tube / well."}</label>}
+      : <label className="flex items-start gap-2 rounded-lg bg-teal-50 p-3 text-sm"><input type="checkbox" className="mt-1" checked={source === "Included in mix"} onChange={event => onSourceChange(event.target.checked ? "Included in mix" : "")} />I confirm DNA and one sequencing primer are already mixed in each tube / well.</label>}
     <button type="button" className="button-primary" onClick={onPreview}>Confirm mapping & preview samples</button>
   </section>;
 }
