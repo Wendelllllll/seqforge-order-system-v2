@@ -6,7 +6,7 @@
  const ctx=canvas.getContext('2d',{alpha:true});if(!ctx)return;
  const reduce=matchMedia('(prefers-reduced-motion: reduce)'),fine=matchMedia('(pointer:fine)');
  const names=['sample','dna','report'],index=names.indexOf(root.dataset.labSeal);
- const align=[[[0,0],[9,0],[35,0],[-6,31],[9,31],[32,32]],[[0,0],[2,1],[15,1],[1,34],[2,34],[2,34]],[[0,0],[14,0],[27,0],[0,23],[14,23],[21,22]]][index];
+ const align=[[[0,0],[19,-1],[12,-1],[-4,19],[8,19],[16,19]],[[0,0],[0,0],[-1,0],[0,65],[0,65],[-1,65]],[[0,0],[4,0],[17,0],[2,3],[6,3],[6,3]]][index];
  const size=340,W=460,H=330,side=300,left=75,top=10;
  const duration=[850,300,360,540,300,800],cycle=duration.reduce((a,b)=>a+b,0)+1500;
  let frames=[],raf=0,ready=false,visible=false,paused=false,start=performance.now(),last=0,clock=0,scan=.5,target=.5,hover=false,replayAt=-1,previousFrame=-1;

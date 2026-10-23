@@ -5,11 +5,7 @@
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const names=['sample','dna','report'];
   // Align the drawn feet between cells; only position changes, never shape.
-  const alignment=[
-    [[0,0],[9,0],[35,0],[-6,31],[9,31],[32,32]],
-    [[0,0],[2,1],[15,1],[1,34],[2,34],[2,34]],
-    [[0,0],[14,0],[27,0],[0,23],[14,23],[21,22]]
-  ];
+  const alignment=[[[0,0],[19,-1],[12,-1],[-4,19],[8,19],[16,19]],[[0,0],[0,0],[-1,0],[0,65],[0,65],[-1,65]],[[0,0],[4,0],[17,0],[2,3],[6,3],[6,3]]];
   const scenes=[];
   let paused=false,timer=0;
   const durations=[700,180,260,400,180,600];

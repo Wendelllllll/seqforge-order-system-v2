@@ -2,8 +2,9 @@
 
 import { ArrowLeft, ArrowRight, Check, CheckCheck, ChevronRight, CircleHelp, LoaderCircle, Mail, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 
 import { Brand } from "@/components/brand";
 import { authClient } from "@/lib/auth-client";
@@ -105,7 +106,7 @@ export function EmailVerification({ email, initiallyVerified, next, linkError }:
     return () => window.removeEventListener("focus", onFocus);
   }, [checkVerification]);
 
-  // DESIGN REVIEW: visual layout and copy below are provisional; see DESIGN_HANDOFF.md.
+  // Artwork reflects real verification state without changing account status.
   // Preserve the verification, resend, account and draft-return behavior above.
   const title = signedOut ? "Sign in to verify your email" : verified ? "Email verified" : "Verify your email";
   const description = signedOut
@@ -152,25 +153,10 @@ export function EmailVerification({ email, initiallyVerified, next, linkError }:
           <div className={styles.reassurance}><ShieldCheck size={17} /><p>{orderReturn ? "Your draft is saved in this browser. Verification does not submit your order; you will review it before submission." : "Verification is required once for this email address, rather than for each order."}</p></div>
           {orderReturn && <Link href={next} className={styles.back}><ArrowLeft size={14} /> Back to editing my order</Link>}
         </div>
-        <aside className={styles.guide} aria-label="Email verification guidance">
-          <p className={styles.guideEyebrow}>SEQFORGE CUSTOMER PORTAL</p>
-          <svg className={styles.trace} viewBox="0 0 240 80" fill="none" aria-hidden="true" focusable="false">
-            <path d="M0 20H240M0 40H240M0 60H240M40 0V80M80 0V80M120 0V80M160 0V80M200 0V80" stroke="currentColor" strokeWidth=".5" opacity=".12" />
-            <path d="M0 62H13C18 62 16 17 22 17S26 62 33 62H63C69 62 66 25 73 25S78 62 85 62H135C141 62 140 13 146 13S150 62 157 62H212C218 62 217 34 222 34S227 62 240 62" stroke="#168c83" strokeWidth="1.5" />
-            <path d="M0 64H33C38 64 38 30 43 30S48 64 55 64H91C98 64 95 18 102 18S108 64 115 64H166C171 64 171 24 177 24S182 64 188 64H240" stroke="#426b96" strokeWidth="1.5" />
-            <path d="M0 66H53C59 66 57 41 63 41S67 66 75 66H112C118 66 116 32 123 32S129 66 137 66H188C194 66 192 16 199 16S205 66 213 66H240" stroke="#8499ad" strokeWidth="1.2" />
-          </svg>
-          <h2>{verified ? "Continue your workflow" : "Before you continue"}</h2>
-          <ol className={styles.guideSteps}>
-            <li><span>01</span><div><strong>Check your inbox</strong><p>Look for the SeqForge verification email. Check your spam folder if needed.</p></div></li>
-            <li><span>02</span><div><strong>Confirm your address</strong><p>The verification link is valid for one hour.</p></div></li>
-            <li><span>03</span><div><strong>{orderReturn ? "Review your order" : "Return to your account"}</strong><p>{orderReturn ? "Continue with your saved sample details and submit when ready." : "Use your verified account for future orders."}</p></div></li>
-          </ol>
-          <div className={styles.supportNote}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/assets/seal-report.png" width={66} height={66} alt="" />
-            <div><p>Questions about your order?</p><Link href="/contact">Contact the SeqForge team <ArrowRight size={12} /></Link></div>
-          </div>
+        <aside className={styles.guide} aria-label="Your SeqForge connection">
+          <Script src="/brand/verification-connection.js" strategy="afterInteractive" />
+          {createElement("seqforge-connection", { state: signedOut ? "idle" : verified ? "verified" : error ? "error" : delivery, "asset-prefix": "/brand" })}
+          <div className={styles.connectionHelp}><span>01 / Open your email</span><span>02 / Confirm the link</span><span>03 / Continue your order</span></div>
         </aside>
       </section>
       <p className={styles.footnote}>Sanger sequencing <span>·</span> Whole Plasmid sequencing <span>·</span> Oligo synthesis</p>

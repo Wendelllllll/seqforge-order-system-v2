@@ -19,6 +19,6 @@
  reduced.addEventListener('change',sync);document.addEventListener('visibilitychange',sync);
  const observer='IntersectionObserver'in window?new IntersectionObserver(entries=>{visible=entries.some(e=>e.isIntersecting);sync();},{threshold:.15}):null;
  if(observer)observer.observe(root);else visible=true;
- const preload=new Image();preload.onload=()=>{loaded=true;render(0);sync();};preload.onerror=()=>{art.innerHTML='';art.style.background="url('/brand/assets/qc-seal-sprites.png') 33.3333% 100% / 400% 200% no-repeat";step(3);root.setAttribute('aria-label','Samples ready for handoff');};preload.src='/brand/assets/seal-packing-journey.png';
+ const preload=new Image();preload.onload=()=>{loaded=true;render(0);sync();};preload.onerror=()=>{art.innerHTML='';art.style.background="url('/brand/assets/seal-report.png') center / contain no-repeat";step(3);root.setAttribute('aria-label','Samples ready for handoff');};preload.src='/brand/assets/seal-packing-journey.png';
  addEventListener('pagehide',stop);addEventListener('pageshow',sync);
 })();
