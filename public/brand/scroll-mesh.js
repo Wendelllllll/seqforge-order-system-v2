@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const sections=[...document.querySelectorAll('.seal-chapter,.sample-journey,.lab-ending,.service-cover,.service-compare,.prep-section,.utility-page .page-hero,.utility-page .login-intro')];
+  const sections=[...document.querySelectorAll('.sample-journey,.lab-ending,.service-cover,.service-compare,.prep-section,.utility-page .page-hero,.utility-page .login-intro')];
   if(!sections.length)return;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)'),mobile=matchMedia('(max-width:760px)');
   const vertex='attribute vec2 a;varying vec2 uv;void main(){uv=a*.5+.5;gl_Position=vec4(a,0.,1.);}';

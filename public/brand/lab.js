@@ -1,5 +1,5 @@
 (() => {
-  const motionButton=document.querySelector('.scene-motion'),motionMedia=matchMedia('(prefers-reduced-motion: reduce)');
+  const motionMedia=matchMedia('(prefers-reduced-motion: reduce)');
   let paused=motionMedia.matches;
   document.addEventListener('visibilitychange',()=>{if(document.hidden)clearJourney()});
   const priceData={
@@ -49,8 +49,8 @@
   function playJourney(){clearJourney();setStep(0);if(paused)return;journeyTimers=[setTimeout(()=>setStep(1),1200),setTimeout(()=>setStep(2),2800)]}
   document.querySelectorAll('.journey-nodes button').forEach(b=>b.addEventListener('click',()=>{clearJourney();setStep(Number(b.dataset.step))}));document.querySelector('.journey-replay').addEventListener('click',()=>{if(paused){setStep(0)}else playJourney()});
   const journeyObserver=new IntersectionObserver(entries=>{for(const e of entries){if(e.isIntersecting){playJourney();journeyObserver.unobserve(e.target)}}},{threshold:.5});journeyObserver.observe(document.querySelector('.journey-machine'));
-  function applyMotion(){document.body.classList.toggle('motion-paused',paused);document.documentElement.style.scrollBehavior=paused?'auto':'';motionButton.setAttribute('aria-pressed',String(paused));motionButton.textContent=paused?'Enable motion':'Pause motion';if(paused)clearJourney();document.dispatchEvent(new CustomEvent('seqforge-motion',{detail:{paused}}))}
-  motionButton.addEventListener('click',()=>{paused=!paused;applyMotion()});motionMedia.addEventListener('change',()=>{paused=motionMedia.matches;applyMotion()});
+  function applyMotion(){document.body.classList.toggle('motion-paused',paused);document.documentElement.style.scrollBehavior=paused?'auto':'';if(paused)clearJourney();document.dispatchEvent(new CustomEvent('seqforge-motion',{detail:{paused}}))}
+  motionMedia.addEventListener('change',()=>{paused=motionMedia.matches;applyMotion()});
   const orderDialog=document.querySelector('#order-dialog'),planner=document.querySelector('#order-planner'),review=document.querySelector('#order-review');
   function resetOrder(){planner.hidden=false;planner.style.display='';review.hidden=true;document.querySelector('#order-heading').textContent='Start with your sample.'}
   document.querySelectorAll('[data-start-order]').forEach(b=>b.addEventListener('click',()=>{resetOrder();orderDialog.showModal()}));document.querySelector('.order-close').addEventListener('click',()=>orderDialog.close());orderDialog.addEventListener('click',e=>{if(e.target===orderDialog){const r=orderDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)orderDialog.close()}});
