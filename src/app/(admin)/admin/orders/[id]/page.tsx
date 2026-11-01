@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 
 import { ResultUpload, StatusControl } from "@/components/admin-order-actions";
 import { StatusBadge } from "@/components/status-badge";
-import { formatDateTime } from "@/lib/orders";
+import { formatDateTime, getStatusLabel } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 
@@ -35,6 +35,8 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         <div className="space-y-3"><p className="text-sm text-slate-500">Submitted {formatDateTime(order.createdAt)}</p><Link href={`/manifest/${order.id}`} className="button-secondary">View / print submission manifest</Link></div>
       </div>
 
+      {order.status === "ON_HOLD" && <section className="mt-6 border border-rose-200 bg-rose-50 p-5 text-rose-950"><h2 className="font-bold">Order needs attention</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{order.holdReason}</p><p className="mt-3 text-xs">Customer-visible message. Previous working stage: {getStatusLabel(order.holdPreviousStatus || "RECEIVED")}. Resolve the hold before continuing.</p></section>}
+
       <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-6">
           <OrderManifest order={order} />
@@ -53,11 +55,11 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </div>
 
         <aside className="space-y-6">
-          <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Update laboratory status</h2><StatusControl key={order.status} orderId={order.id} currentStatus={order.status} service={order.service} /></section>
-          {order.service !== "OLIGO" && <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Result file</h2><ResultUpload orderId={order.id} existingName={order.result?.originalName} />{order.result ? <Link href={`/api/results/${order.result.id}`} className="button-secondary mt-3 w-full justify-center"><Download className="h-4 w-4" /> Download current file</Link> : null}</section>}
+          <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Update laboratory status</h2><StatusControl key={`${order.status}:${order.statusRevision}`} orderId={order.id} currentStatus={order.status} service={order.service} hasResult={!!order.result} customerEmail={order.user.email} revision={order.statusRevision} holdReason={order.holdReason} holdPreviousStatus={order.holdPreviousStatus} /></section>
+          {order.service !== "OLIGO" && <section className="panel p-5"><h2 className="mb-4 text-sm font-bold text-slate-950">Result file</h2><ResultUpload orderId={order.id} existingName={order.result?.originalName} completed={order.status === "COMPLETED"} />{order.result ? <Link href={`/api/results/${order.result.id}`} className="button-secondary mt-3 w-full justify-center"><Download className="h-4 w-4" /> Download current file</Link> : null}</section>}
           <section className="panel p-5">
             <h2 className="text-sm font-bold text-slate-950">Status history</h2>
-            <ol className="mt-4 space-y-4">{order.statusHistory.map((entry) => <li key={entry.id} className="border-l-2 border-cyan-600 pl-3"><p className="text-sm font-semibold capitalize text-slate-800">{entry.status.toLowerCase()}</p><p className="mt-1 text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p></li>)}</ol>
+            <ol className="mt-4 space-y-4">{order.statusHistory.map((entry) => <li key={entry.id} className="border-l-2 border-cyan-600 pl-3"><p className="text-sm font-semibold text-slate-800">{entry.previousStatus ? `${getStatusLabel(entry.previousStatus)} → ` : ""}{getStatusLabel(entry.status)}</p><p className="mt-1 text-xs text-slate-400">{formatDateTime(entry.createdAt)}{entry.actorName ? ` · ${entry.actorName}` : ""}</p>{entry.note && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{entry.note}</p>}</li>)}</ol>
           </section>
         </aside>
       </div>

@@ -1,0 +1,28 @@
+# An allowlist keeps credentials, local data, git history, and Windows-built
+# dependencies out of the Docker build context, including remote builders.
+**
+!package.json
+!package-lock.json
+!next.config.ts
+!postcss.config.mjs
+!tsconfig.json
+!prisma.config.ts
+!prisma/
+!prisma/schema.prisma
+!prisma/migrations/
+!prisma/migrations/**
+!src/
+!src/**
+!public/
+!public/**
+!scripts/
+!scripts/seed-dropboxes.ts
+!scripts/internal-mail.ts
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/node_modules
+**/.next
+**/*.db
+**/*.sqlite*

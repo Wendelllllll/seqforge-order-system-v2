@@ -9,24 +9,28 @@ import { safeVerificationReturn } from "@/lib/verification-return";
 const handlers = toNextJsHandler(auth);
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  if (url.pathname.includes("/reset-password/")) return Response.json({ error: "Use the reset link in your email." }, { status: 404 });
   if (url.pathname.endsWith("/verify-email")) {
-    // Both successful and failed links return to our designed verification page.
-    // Never use the request Host or an arbitrary callback as an email destination.
+    // Email scanners may follow this GET before the customer opens their inbox.
+    // Only the explicit confirmation POST may call Better Auth's verification API.
     const base = new URL(process.env.BETTER_AUTH_URL || "http://localhost:3000");
     let next = "/dashboard";
     try {
       const candidate = new URL(url.searchParams.get("callbackURL") || "/verify-email", base.origin);
       if (candidate.origin === base.origin && candidate.pathname === "/verify-email") next = safeVerificationReturn(candidate.searchParams.get("next"));
     } catch { /* Fall back to the account dashboard. */ }
-    const callback = new URL("/verify-email", base.origin);
+    const callback = new URL("/verify-email/confirm", base.origin);
     callback.searchParams.set("next", next);
-    callback.searchParams.set("verified", "1");
-    if (!url.searchParams.get("token")) {
+    const token = url.searchParams.get("token");
+    if (!token || token.length > 4096) {
+      callback.pathname = "/verify-email";
       callback.searchParams.set("error", "INVALID_TOKEN");
-      return Response.redirect(callback, 303);
+    } else {
+      callback.searchParams.set("token", token);
     }
-    url.searchParams.set("callbackURL", callback.toString());
-    return handlers.GET(new Request(url, request));
+    return new Response(null, { status: 303, headers: {
+      Location: callback.toString(), "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer",
+    } });
   }
   return handlers.GET(request);
 }

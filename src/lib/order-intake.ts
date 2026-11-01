@@ -81,6 +81,10 @@ export const orderSchema = z.object({
   if (plasmid !== (order.submissionMode === "Whole plasmid")) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
   if (oligo !== ["Oligo standard", "Oligo modified"].includes(order.submissionMode)) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
   const details = order.fulfillment;
+  if (details.deliveryMethod === "Dropbox") {
+    if (oligo) ctx.addIssue({ code: "custom", path: ["fulfillment", "deliveryMethod"], message: "Oligo synthesis does not use an incoming-sample dropbox. Enter your delivery address instead." });
+    else if (!details.dropboxId || details.dropbox?.id !== details.dropboxId) ctx.addIssue({ code: "custom", path: ["fulfillment", "dropboxId"], message: "Choose a dropbox location and review its details." });
+  }
   const required = ["contactName", "contactPhone", "billingOrganization", "billingContactName", "billingEmail", "billingAddress"] as const;
   for (const key of required) if (!details[key]) ctx.addIssue({ code: "custom", path: ["fulfillment", key], message: oligo ? "This detail is required for contact and billing." : "This detail is required for pickup or billing." });
   if (!oligo && details.deliveryMethod === "Pickup" && !details.pickupLocation) ctx.addIssue({ code: "custom", path: ["fulfillment", "pickupLocation"], message: "Enter the institution, building, room and collection point." });

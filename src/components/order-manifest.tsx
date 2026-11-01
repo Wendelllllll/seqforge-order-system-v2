@@ -42,6 +42,7 @@ export function OrderManifest({ order }: { order: ManifestOrder }) {
       {details ? <div className="grid gap-3 sm:grid-cols-2">
         <div><p><strong>Delivery:</strong> {details.deliveryMethod}</p>
           {details.deliveryMethod === "Pickup" ? <><p className="whitespace-pre-wrap"><strong>Pickup:</strong> {details.pickupLocation}</p><p className="whitespace-pre-wrap">{details.pickupInstructions}</p></> : null}
+          {details.deliveryMethod === "Dropbox" && details.dropbox && <div className="mt-2 space-y-1"><p><strong>Dropbox:</strong> {details.dropbox.name}</p><p>{details.dropbox.address}</p><p className="whitespace-pre-wrap"><strong>Box location:</strong> {details.dropbox.placementInstructions || "Contact SeqForge to confirm the exact position before depositing samples."}</p><p className="whitespace-pre-wrap"><strong>Collection:</strong> {details.dropbox.pickupSchedule || "Contact SeqForge to confirm the schedule."}</p>{details.dropbox.accessNotes && <p className="whitespace-pre-wrap">{details.dropbox.accessNotes}</p>}<p className="text-slate-500">Include this printed manifest with your labelled samples. Order submission does not confirm sample receipt.</p></div>}
           <p><strong>Contact:</strong> {details.contactName} · {details.contactPhone}</p>
         </div>
         <div><p><strong>PI:</strong> {details.piName || "Not provided"}</p><p><strong>Bill to:</strong> {details.billingOrganization}</p>

@@ -14,8 +14,8 @@ import { blankDefaults, type OrderDefaults } from "@/lib/order-defaults";
 import { blankOrder, issueLabel, MAX_IMPORT_BYTES, orderSchema, type OrderDraft } from "@/lib/order-intake";
 import { emailVerificationUrl, orderLoginUrl, orderReturnPath, type OrderResumeState } from "@/lib/order-resume";
 import { blankOligo, inspectOligoSheet, oligoBaseCount, oligoTemplate, parseMappedOligos } from "@/lib/oligo-entry";
-import type { OligoDraft } from "@/lib/oligo-schema";
-import { priceOrder } from "@/lib/pricing";
+import { OLIGO_BASE_PRICE_NOTICE, OLIGO_BASE_RATE_CENTS, type OligoDraft } from "@/lib/oligo-schema";
+import { formatMoney, priceOrder } from "@/lib/pricing";
 import type { MappingSheet } from "@/lib/sanger-column-mapping";
 
 export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modified = false }: { userId?: string | null; defaults?: OrderDefaults; modified?: boolean }) {
@@ -43,6 +43,10 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
   const items = draft.oligos || [];
   const enteredItems = items.filter(item => item.name.trim() || item.sequence.trim());
   const bases = oligoBaseCount(enteredItems);
+  const livePrice = (() => {
+    try { return priceOrder({ ...draft, oligos: enteredItems }); }
+    catch { return null; }
+  })();
   const resumeState: OrderResumeState = { draft, step, review: !!review, entryMethod, bulkText, mappingSheet, oligoPendingImport: pendingImport, pendingImport: null, submissionKey, shareText: "", pasteSource: "", imported: false, sampleCount: 1 };
   const resume = useOrderDraft(mode, userId, resumeState, saved => {
     setDraft(saved.draft); setStep(saved.review ? "details" : saved.step); setEntryMethod(saved.entryMethod === "manual" ? "manual" : "paste");
@@ -155,7 +159,7 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
   if (resume.pendingDraft) return <OrderDraftChoice saved={resume.pendingDraft} onContinue={resume.continueDraft} onRestart={resume.startFresh} error={resume.storageError} />;
   if (review) return <div className="space-y-6">
     {notice}<h2 ref={headingRef} tabIndex={-1} className="text-2xl font-bold">Review your Oligo order</h2>
-    <p className="text-sm text-slate-600">Check each sequence in the 5′ to 3′ direction, requested specifications and shipping address. Submission requests a quote; production starts only after you approve it.</p>
+    <p className="text-sm text-slate-600">Check each sequence in the 5′ to 3′ direction, requested specifications, base synthesis estimate and shipping address. The lab will confirm final charges; production starts only after you approve the quote.</p>
     <OrderManifest order={{ ...review, oligoSnapshot: { items: review.oligos, shippingAddress: review.oligoShippingAddress, format: review.oligoFormat }, fulfillmentSnapshot: review.fulfillment, pricingSnapshot: priceOrder(review) }} />
     {errorPanel}{accountChanged && <button type="button" className="button-secondary" onClick={() => window.location.reload()}>Reload for current account</button>}<div className="flex flex-wrap justify-end gap-3"><button type="button" className="button-secondary" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }}>Edit oligos</button><button type="button" className="button-secondary" disabled={loading} onClick={() => { setReview(null); setErrors([]); }}>Edit delivery & billing</button><button type="button" className="button-primary" disabled={loading || accountChanged} onClick={submitOrder}>{loading && <LoaderCircle size={16} className="animate-spin" />}{userId ? "Submit for price confirmation" : "Sign in to submit order"}</button></div>
   </div>;
@@ -198,7 +202,7 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
     <aside className="sanger-live-summary" aria-label="Live order summary"><div className="sanger-live-heading"><span className="eyebrow">Your order</span><Dna size={25} strokeWidth={1.5} /></div><h2>Oligo synthesis <span>{modified ? "Modified DNA" : "Standard DNA"}</span></h2>
       <div className="sanger-live-counts" aria-live="polite"><div><strong>{enteredItems.length}</strong><span>oligos</span></div><div><strong>{bases.toLocaleString()}</strong><span>total bases</span></div></div>
       <ol className="sanger-live-progress"><li data-active={step === "samples"}>{step === "details" ? <Check size={16} /> : <Circle size={16} />}<span>Oligos & specifications<small>{bulkText.trim() ? "Apply your spreadsheet" : "Build your sequence list"}</small></span></li><li data-active={step === "details"}><Circle size={16} /><span>Delivery & billing<small>Where to send your oligos</small></span></li><li><Circle size={16} /><span>Review & submit<small>Request your lab quote</small></span></li></ol>
-      <div className="sanger-live-price"><p>Price pending lab confirmation</p><small>We’ll review sequences, synthesis scale, purification and modifications. Production starts only after you approve the quote.</small></div>
+      <div className="sanger-live-price"><p>Standard DNA · {formatMoney(OLIGO_BASE_RATE_CENTS)} / base</p>{livePrice ? <>{livePrice.lines.length > 0 && <p>{livePrice.lines.reduce((sum, line) => sum + line.quantity, 0).toLocaleString()} standard bases × {formatMoney(OLIGO_BASE_RATE_CENTS)}</p>}{livePrice.knownSubtotalCents !== undefined && <div><span>Standard oligos only</span><strong>{formatMoney(livePrice.knownSubtotalCents)}</strong></div>}<div><span>{livePrice.pendingQuote ? "Final order total" : "Base synthesis estimate"}</span><strong>{formatMoney(livePrice.subtotalCents)}</strong></div>{!!livePrice.unpricedItems?.length && <p className="text-sm">{livePrice.unpricedItems.length} {livePrice.unpricedItems.length === 1 ? "oligo requires" : "oligos require"} a separate quote.</p>}</> : <p className="text-sm">Complete valid oligo names and DNA sequences to see your estimate.</p>}<small>{OLIGO_BASE_PRICE_NOTICE} No payment is collected here.</small></div>
       {bulkText.trim() && <p className="sanger-import-note" role="status">Spreadsheet not applied yet. Counts reflect your oligo table.</p>}
     </aside></div>
   </form>;

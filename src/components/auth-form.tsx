@@ -43,6 +43,7 @@ export function LoginForm({ next = null }: { next?: string | null }) {
     <form method="post" onSubmit={submit} className="space-y-5">
       <Field label="Email address" name="email" type="email" autoComplete="email" required />
       <Field label="Password" name="password" type="password" autoComplete="current-password" required />
+      <div className="text-right"><Link href={next ? `/forgot-password?next=${encodeURIComponent(next)}` : "/forgot-password"} className="text-sm font-semibold text-cyan-700 hover:text-cyan-800">Forgot password?</Link></div>
       {error ? <FormError message={error} /> : null}
       <button type="submit" disabled={loading} className="button-primary w-full justify-center">
         {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}

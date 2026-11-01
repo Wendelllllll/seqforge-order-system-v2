@@ -1,0 +1,13 @@
+# Only the approved test hostnames are served. DNS must point to this instance.
+www.seqforgebio.com {
+    redir https://seqforgebio.com{uri} 308
+}
+
+seqforgebio.com {
+    encode zstd gzip
+    # This is a test environment; this header is not access control.
+    header X-Robots-Tag "noindex, nofollow, noarchive"
+    reverse_proxy app:3000
+}
+
+# Intentionally no access log: verification/reset links contain private tokens.

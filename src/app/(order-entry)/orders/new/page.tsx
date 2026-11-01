@@ -15,11 +15,14 @@ import { getSession } from "@/lib/session";
 import { blankDefaults, readDefaults } from "@/lib/order-defaults";
 import { getRateSchedule } from "@/lib/pricing-store";
 import { getEffectiveRateSchedule } from "@/lib/customer-pricing-store";
+import { listDropboxes } from "@/lib/dropbox-store";
+import { dropboxSnapshot } from "@/lib/dropboxes";
 
-export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ service?: string | string[]; type?: string | string[]; retired?: string | string[] }> }) {
+export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ service?: string | string[]; type?: string | string[]; retired?: string | string[]; dropbox?: string | string[] }> }) {
   const session = await getSession();
   if (session?.user.role === "admin") redirect("/admin");
   const query = await searchParams;
+  const dropboxId = typeof query.dropbox === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(query.dropbox) ? query.dropbox : undefined;
   if (query.service === "sanger" && query.type === "ready-to-load") redirect("/orders/new?service=sanger&retired=ready-to-load");
   const service = ORDER_SERVICES.find(item => item.id === query.service);
   const option = service?.options.find(item => item.id === query.type);
@@ -29,7 +32,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
     return <div className="mx-auto max-w-6xl">
       <OrderSteps service={service} option={option} />
       {service?.id === "sanger" && query.retired === "ready-to-load" && <p role="status" className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">This submission type is no longer offered. Choose Standard or Pre-mixed to start a new order.</p>}
-      {!service ? <ServicePicker /> : service.options.length && !option ? <ServiceOptions service={service} /> : <ServicePlaceholder service={service} option={option} />}
+      {!service ? <ServicePicker dropboxId={dropboxId} /> : service.options.length && !option ? <ServiceOptions service={service} dropboxId={dropboxId} /> : <ServicePlaceholder service={service} option={option} />}
     </div>;
   }
 
@@ -38,6 +41,14 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
   const oligo = service.id === "oligo";
   const initialSchedule = user ? await getEffectiveRateSchedule(prisma, user.id) : await getRateSchedule(prisma);
   const defaults = user ? user.orderDefaults ? readDefaults(user.orderDefaults) : { ...blankDefaults(), contactName: user.name, contactPhone: user.phone || "", billingOrganization: user.organization } : blankDefaults();
+  if (oligo) { defaults.deliveryMethod = "Pickup"; delete defaults.dropboxId; delete defaults.dropbox; }
+  else {
+    // New sequencing orders open the location picker; restored drafts retain their own delivery choice.
+    if (defaults.deliveryMethod !== "Dropbox") { delete defaults.dropboxId; delete defaults.dropbox; }
+    defaults.deliveryMethod = "Dropbox";
+  }
+  const selectedDropbox = !oligo && dropboxId ? (await listDropboxes(prisma)).find(location => location.id === dropboxId) : null;
+  if (selectedDropbox) { defaults.deliveryMethod = "Dropbox"; defaults.dropboxId = selectedDropbox.id; defaults.dropbox = dropboxSnapshot(selectedDropbox); }
   return (
     <div className="mx-auto sanger-order-page">
       <OrderSteps service={service} option={option} />
@@ -47,7 +58,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{oligo ? "Create an Oligo synthesis order" : plasmid ? "Create a Whole Plasmid sequencing order" : "Create a Sanger sequencing order"}</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{oligo ? "Enter sequences or paste directly from Excel, then confirm delivery and billing. We’ll review your specifications and confirm a quote before production." : <>Enter samples or paste directly from Excel, then confirm delivery and billing. {plasmid ? "Your sample count and sequencing total are calculated for you." : "Sample and reaction counts are calculated for you."}</>}</p>
       </div>
-      <div className="mt-8">{oligo ? <OligoOrderForm key={`oligo:${option!.id}:${user?.id || "guest"}`} userId={user?.id || null} defaults={defaults} modified={option!.id === "modified"} /> : <OrderForm key={`${plasmid ? "whole-plasmid" : option!.id}:${user?.id || "guest"}`} userId={user?.id || null} defaults={defaults} initialSchedule={initialSchedule} initialSubmissionMode={plasmid ? "Whole plasmid" : option!.submissionMode} />}</div>
+      <div className="mt-8">{oligo ? <OligoOrderForm key={`oligo:${option!.id}:${user?.id || "guest"}`} userId={user?.id || null} defaults={defaults} modified={option!.id === "modified"} /> : <OrderForm key={`${plasmid ? "whole-plasmid" : option!.id}:${user?.id || "guest"}:${selectedDropbox?.id || "no-map-selection"}`} userId={user?.id || null} defaults={defaults} requestedDropbox={selectedDropbox ? dropboxSnapshot(selectedDropbox) : undefined} initialSchedule={initialSchedule} initialSubmissionMode={plasmid ? "Whole plasmid" : option!.submissionMode} />}</div>
     </div>
   );
 }

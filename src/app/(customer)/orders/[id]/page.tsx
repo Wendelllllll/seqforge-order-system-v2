@@ -7,7 +7,7 @@ import { notFound } from "next/navigation";
 
 import { StatusBadge } from "@/components/status-badge";
 
-import { formatDate, formatDateTime, ORDER_STATUSES, STATUS_LABELS } from "@/lib/orders";
+import { formatDate, formatDateTime, ORDER_PROGRESS_STATUSES, STATUS_LABELS } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import { requireCustomer } from "@/lib/session";
 
@@ -25,7 +25,10 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
   });
   if (!order) notFound();
 
-  const currentIndex = ORDER_STATUSES.indexOf(order.status as (typeof ORDER_STATUSES)[number]);
+  const progressStatus = order.status === "ON_HOLD" ? order.holdPreviousStatus : order.status;
+  const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(progressStatus as (typeof ORDER_PROGRESS_STATUSES)[number]);
+  const releasedResult = order.status === "COMPLETED" ? order.result : null;
+  const latestResolution = [...order.statusHistory].reverse().find(entry => entry.previousStatus === "ON_HOLD" && entry.status !== "ON_HOLD" && entry.note);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -45,9 +48,11 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
         <Link href={`/manifest/${order.id}`} className="button-secondary">View / print submission manifest</Link>
       </div>
 
+      {order.status === "ON_HOLD" ? <section className="mt-6 border border-rose-200 bg-rose-50 p-5 text-rose-950"><h2 className="font-bold">Your order needs attention</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{order.holdReason}</p><p className="mt-3 text-xs leading-5">The order is paused while this is resolved. Please follow the lab’s instructions above. If you contact SeqForge, include order number {order.orderNumber}.</p></section> : latestResolution ? <section className="mt-6 border border-emerald-200 bg-emerald-50 p-5 text-emerald-950"><h2 className="font-bold">Order hold resolved</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{latestResolution.note}</p><p className="mt-3 text-xs">Updated {formatDateTime(latestResolution.createdAt)}</p></section> : null}
+
       {order.service === "OLIGO" ? <section className="panel mt-8 border-amber-200 bg-amber-50 p-5 sm:p-6"><h2 className="font-bold text-amber-950">Awaiting lab quote</h2><p className="mt-2 text-sm text-amber-900">Your request is saved for review. The lab will contact you to confirm specifications and price. Production starts only after you approve the quote.</p></section> : <section className="panel mt-8 p-5 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-6">
-          {ORDER_STATUSES.map((status, index) => {
+          {ORDER_PROGRESS_STATUSES.map((status, index) => {
             const complete = index <= currentIndex;
             return (
               <div key={status} className="relative">
@@ -75,14 +80,14 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
             </dl>
           </section>
 
-          {order.service !== "OLIGO" && <section className={`border p-5 ${order.result ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
-            <div className="flex items-center gap-3"><FlaskConical className={`h-5 w-5 ${order.result ? "text-emerald-700" : "text-slate-400"}`} /><h2 className="text-sm font-bold text-slate-950">Sequencing result</h2></div>
-            {order.result ? (
+          {order.service !== "OLIGO" && <section className={`border p-5 ${releasedResult ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+            <div className="flex items-center gap-3"><FlaskConical className={`h-5 w-5 ${releasedResult ? "text-emerald-700" : "text-slate-400"}`} /><h2 className="text-sm font-bold text-slate-950">Sequencing result</h2></div>
+            {releasedResult ? (
               <div className="mt-4">
-                <div className="flex items-start gap-3"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{order.result.originalName}</p><p className="mt-1 text-xs text-slate-500">Uploaded {formatDate(order.result.uploadedAt)}</p></div></div>
-                <Link href={`/api/results/${order.result.id}`} className="button-primary mt-4 w-full justify-center bg-emerald-700 hover:bg-emerald-800"><Download className="h-4 w-4" /> Download result</Link>
+                <div className="flex items-start gap-3"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{releasedResult.originalName}</p><p className="mt-1 text-xs text-slate-500">Uploaded {formatDate(releasedResult.uploadedAt)}</p></div></div>
+                <Link href={`/api/results/${releasedResult.id}`} className="button-primary mt-4 w-full justify-center bg-emerald-700 hover:bg-emerald-800"><Download className="h-4 w-4" /> Download result</Link>
               </div>
-            ) : <p className="mt-3 text-sm leading-6 text-slate-500">A download will appear here after SeqForge completes processing and uploads your result.</p>}
+            ) : <p className="mt-3 text-sm leading-6 text-slate-500">A download will appear here when SeqForge completes review and releases your result.</p>}
           </section>}
         </aside>
       </div>

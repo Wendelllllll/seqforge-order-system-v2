@@ -24,8 +24,8 @@ test("customer mail is independently off by default and preview requires no send
   assert.ok(customerRecipientAllowed(preview, "synthetic@example.test"));
 });
 
-test("live customer delivery requires an explicit allowlist and wildcard is production-only", () => {
-  for (const policy of ["", "*", "customer@example.test,*", "Name <customer@example.test>", "customer@example.test\r\nBcc: other@example.test"]) {
+test("live customer delivery requires an explicit list or wildcard in development and production", () => {
+  for (const policy of ["", "customer@example.test,*", "Name <customer@example.test>", "customer@example.test\r\nBcc: other@example.test"]) {
     assert.throws(() => smtp({ CUSTOMER_MAIL_ALLOWED_RECIPIENTS: policy }), /MAIL_CONFIG_INVALID/);
   }
   const config = smtp();
@@ -33,7 +33,11 @@ test("live customer delivery requires an explicit allowlist and wildcard is prod
   assert.ok(customerRecipientAllowed(config, "second@example.test"));
   assert.equal(customerRecipientAllowed(config, "staff@example.test"), false);
   assert.equal(customerRecipientAllowed(config, "unrelated@example.test"), false);
-  assert.ok(customerRecipientAllowed(smtp({ NODE_ENV: "production", CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "*" }), "production-customer@example.test"));
+  for (const nodeEnv of ["development", "production"] as const) {
+    const unrestricted = smtp({ NODE_ENV: nodeEnv, CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "*" });
+    assert.ok(customerRecipientAllowed(unrestricted, "new-customer@example.test"));
+    assert.throws(() => customerRecipientAllowed(unrestricted, "customer@example.test\r\nBcc: other@example.test"), /MAIL_CONFIG_INVALID/);
+  }
 });
 
 test("customer delivery preserves the actual customer recipient with no CC or BCC", async () => {
@@ -66,7 +70,9 @@ test("disallowed recipients and header injection never open a transport", async 
 test("customer mail retains the isolated-test SMTP guard at configuration and send time", async () => {
   assert.throws(() => smtp({ NODE_ENV: "test" }), /SMTP_DISABLED_IN_TESTS/);
   assert.throws(() => smtp({ SEQFORGE_SMOKE_SCHEMA: "seqforge_smoke_synthetic" }), /SMTP_DISABLED_IN_TESTS/);
-  const config = smtp();
+  assert.throws(() => smtp({ NODE_ENV: "test", CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "*" }), /SMTP_DISABLED_IN_TESTS/);
+  assert.throws(() => smtp({ SEQFORGE_SMOKE_SCHEMA: "seqforge_smoke_synthetic", CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "*" }), /SMTP_DISABLED_IN_TESTS/);
+  const config = smtp({ CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "*" });
   const previous = process.env.SEQFORGE_SMOKE_SCHEMA;
   let connections = 0;
   try {

@@ -7,6 +7,7 @@ const styles: Record<string, string> = {
   SEQUENCED: "bg-violet-50 text-violet-700 ring-violet-200",
   QC: "bg-cyan-50 text-cyan-700 ring-cyan-200",
   COMPLETED: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  ON_HOLD: "bg-rose-50 text-rose-800 ring-rose-200",
 };
 
 export function StatusBadge({ status }: { status: string }) {

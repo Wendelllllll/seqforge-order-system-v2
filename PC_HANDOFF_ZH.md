@@ -1,8 +1,12 @@
 # SeqForge 换电脑演示与接续开发
 
-更新：2026 年 10 月 14 日。本文替代旧版 SQLite 交接说明。
+更新：2026 年 11 月 1 日。本文用于本地开发和独立演示环境；AWS 发布另见[线上与域名交接](deploy/aws/HANDOFF_ZH.md)。
 
 当前完整前台、客户下单、管理员后台和 API 在同一个 Next.js 应用内，数据库使用 PostgreSQL。GitHub 同步源码、依赖锁定文件和数据库迁移；不会同步本机账号、订单、结果文件、`.env`、浏览器草稿或登录状态。把代码拉到另一台电脑不等于完成网站部署。
+
+**只向老板或同事演示时，可以直接打开 [https://seqforgebio.com](https://seqforgebio.com)，不必安装本地服务，也不依赖开发电脑开机。** 网站运行在 AWS；`www` 会跳转到这个主入口。GitHub push 目前不会自动发布网站。
+
+本地与云端使用独立数据库：本机已有账号、管理员权限、历史订单和客户专属价格不会自动出现在云端，反之亦然。云端指定管理员已完成真实注册、邮箱验证和授权升级；不要在新电脑复制或重建这个账号来“同步权限”。旧的 `seqforge.com` 和公司邮箱仍保持原样。
 
 ## 新 Windows 电脑：首次运行
 
@@ -18,7 +22,7 @@ node --version
 npm.cmd --version
 ```
 
-Node.js 22.23.2、PostgreSQL 18.6 已在现有环境验证。`.nvmrc` 不会自动在 Windows 安装 Node。本文使用 `npm.cmd`，无需修改系统 PowerShell 执行策略。
+Node.js 22.23.4 和 PostgreSQL 18.6 已在 AWS 环境验证；依赖版本以当前锁定文件为准。`.nvmrc` 不会自动在 Windows 安装 Node。本文使用 `npm.cmd`，无需修改系统 PowerShell 执行策略。
 
 ### 2. 下载源码
 
@@ -53,23 +57,18 @@ RESULT_STORAGE_PATH="storage/results"
 
 `YOUR_PASSWORD` 必须换为刚设置的数据库密码。密码中的 `@`、`:`、`/`、`#`、`%` 等字符需要进行 URL 编码；也可为这个独立演示数据库生成只含随机字母和数字的长密码。若 PostgreSQL 使用其他端口，同步修改 `5432`。不要把 `.env` 上传 GitHub 或发送到公开聊天中。
 
-### 4. 初始化演示账号并启动
+### 4. 初始化本地应用并启动
 
 确认 `.env` 指向刚创建的独立 `seqforge_demo` 数据库，再运行：
 
 ```powershell
-npm.cmd run setup -- --seed-demo
+npm.cmd run setup
 npm.cmd run dev -- --hostname localhost --port 3000
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，保持终端运行。客户和管理员可分别使用普通窗口与无痕窗口：
+打开 [http://localhost:3000](http://localhost:3000)，保持终端运行。默认初始化不会创建演示账号；公开页面和业务选项可以先在未登录状态查看。需要研究验证页面时，先按[邮件说明](EMAIL_NOTIFICATIONS.md)配置本地 preview 模式，不要为了设计测试改用云端真实客户数据。
 
-| 角色 | 邮箱 | 密码 | 入口 |
-| --- | --- | --- | --- |
-| 客户 | `scientist@demo.local` | `DemoCustomer!2026` | `/dashboard` |
-| 管理员 | `admin@seqforge.local` | `SeqForgeDemo!2026` | `/admin` |
-
-种子只创建本地演示账号，不创建订单；它不会把当前工作电脑的数据带过来。`--seed-demo` 只适用于这类独立演示数据库，不能在保存真实客户或自己订单的工作数据库上使用。`SHOW_DEMO_ACCOUNTS="true"` 只是让本地登录页显示演示账号，不负责创建账号。
+可选的 `--seed-demo` 机制仅适用于明确可丢弃的独立本地数据库。它不会迁移原电脑数据，不能在已有真实账号、订单的工作库或 AWS 库运行。文档不记录账户口令；不要把演示凭据用于真实账号。合成下单测试优先使用 `npm.cmd run test:smoke` 的隔离环境。
 
 以后启动这台已经配置好的 Windows 电脑，可以双击 `Start-SeqForge.cmd`。它会启动网站并打开浏览器；标准安装的 PostgreSQL 服务需要已经运行。原工作电脑若存在 `%LOCALAPPDATA%\SeqForge` 下的便携数据库，启动器会按原方式启动它。启动器不会自动安装依赖、迁移数据库、重建账号或清空数据。
 
@@ -105,7 +104,7 @@ npm.cmd run test:smoke
 
 `test:smoke` 会启动独立端口、PostgreSQL schema 和结果目录。不要直接绕过它调用 `scripts/smoke-ordering.ts`。
 
-演示可依次查看公开网站、三项业务选择、Sanger/Whole Plasmid 填表与导入、登录后下单，以及管理员订单、客户、价格和结果页面。Oligo 的实际完成程度以当前页面为准，不能把选择页当作已完成的独立下单流程。
+演示可依次查看公开网站、三项业务选择、Sanger/Whole Plasmid/Oligo 填表与列对应导入、草稿恢复、Dropbox 地图，以及管理员订单、客户、价格和结果页面。Sanger 仅有 Standard/Pre-mixed；标准 Oligo 已按 $0.25/base 计算，其他规格另报价，但完整报价批准和生产流程尚未实现。密码找回、异常订单和完成后的结果通知已有代码，实际邮件/结果闭环仍需验收。需要提交合成订单时继续使用隔离环境。
 
 ## 数据转移与常见问题
 
@@ -124,3 +123,7 @@ npm.cmd run test:smoke
 确实需要把真实账号、历史订单或结果带到另一台电脑时，另行通过安全方式迁移 PostgreSQL 备份、结果文件及必要配置；先备份接收电脑原有数据。这不是 `git pull` 的一部分，不能将数据库、密钥、客户文件或个人合同放进仓库。
 
 后续开发先读 `AGENTS.md`、`README.md` 和实际源码；Next.js 的版本文档在 `node_modules/next/dist/docs/`。同一功能尽量在一台电脑完成并提交，换电脑前先推送，另一台电脑先拉取；不要强制推送覆盖别的修改。
+
+## 修改怎样进入线上网站
+
+设计伙伴在本地修改、检查并提交到 GitHub后，线上网站不会立即改变。维护人员需要选择明确的源码版本，在 AWS 构建新的 Linux 镜像，备份并显式应用需要的迁移，再替换运行容器、检查 HTTPS 与健康状态。不要把 Windows 的 `node_modules`、`.next`、本地 `.env` 或数据库复制到服务器，也不要在 AWS 执行上面的本地 setup/demo 步骤。完整流程见[中文 AWS/GoDaddy 交接](deploy/aws/HANDOFF_ZH.md)和[英文运维手册](deploy/aws/README.md)。

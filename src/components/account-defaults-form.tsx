@@ -21,7 +21,7 @@ export function AccountDefaultsForm({ initial }: { initial: OrderDefaults }) {
     finally { setSaving(false); }
   }}>
     <h2 className="text-lg font-bold">Reusable order details</h2>
-    <p className="text-sm text-slate-600">Save pickup and billing details once, then adjust them for individual orders. These defaults belong to your account; they are not shared with other lab members. You can save incomplete details and finish them when ordering.</p>
+    <p className="text-sm text-slate-600">Save contact and billing details once, then adjust them for individual orders. New Sanger and Whole Plasmid orders start with Dropbox; you can also choose lab pickup or shipping. These details belong to your account and are not shared with other lab members. You can save incomplete details and finish them when ordering.</p>
     <fieldset disabled={saving}><OrderDefaultFields value={value} onChange={(next) => { setValue(next); setMessage(""); setError(""); }} /></fieldset>
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-700">{message}</p> : null}

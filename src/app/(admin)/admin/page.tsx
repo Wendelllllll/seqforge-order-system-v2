@@ -8,12 +8,13 @@ import { requireAdmin } from "@/lib/session";
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<OrderQuery> }) {
   await requireAdmin();
-  const [totalOrders, newOrders, activeOrders, completedOrders, customerCount] = await Promise.all([
+  const [totalOrders, newOrders, activeOrders, completedOrders, customerCount, heldOrders] = await Promise.all([
     prisma.order.count(),
     prisma.order.count({ where: { status: "SUBMITTED" } }),
-    prisma.order.count({ where: { status: { notIn: ["SUBMITTED", "COMPLETED"] } } }),
+    prisma.order.count({ where: { status: { notIn: ["SUBMITTED", "COMPLETED", "ON_HOLD"] } } }),
     prisma.order.count({ where: { status: "COMPLETED" } }),
     prisma.user.count({ where: { role: "customer" } }),
+    prisma.order.count({ where: { status: "ON_HOLD" } }),
   ]);
 
   return (
@@ -38,6 +39,8 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
           </div>
         ))}
       </div>
+
+      {heldOrders > 0 && <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border border-rose-200 bg-rose-50 p-5 text-rose-950"><div><p className="font-bold">{heldOrders} {heldOrders === 1 ? "order needs" : "orders need"} attention</p><p className="mt-1 text-sm">Review customer instructions and resolve holds before work continues.</p></div><Link className="button-secondary" href="/admin?status=ON_HOLD#orders">Review held orders</Link></div>}
 
       <AdminOrders query={await searchParams} base="/admin" />
 

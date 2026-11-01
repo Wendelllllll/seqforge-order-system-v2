@@ -4,6 +4,7 @@ import { orderDefaultsSchema } from "./order-defaults";
 import { orderServiceUrl, ORDER_SERVICES } from "./order-services";
 import { savedRateScheduleSchema } from "./rate-schedule";
 import { oligoSchema } from "./oligo-schema";
+import { dropboxOrderUrl } from "./dropboxes";
 
 // Drafts permit unfinished text. Final submission still uses the strict orderSchema.
 const text = z.string().max(10000);
@@ -98,6 +99,8 @@ export function safeOrderReturn(value: unknown): string | null {
     const optionId = url.searchParams.get("type");
     if (serviceId === "sanger" && (optionId === "ready-to-load" || url.searchParams.get("retired") === "ready-to-load")) return "/orders/new?service=sanger&retired=ready-to-load";
     if (optionId && !service.options.some(option => option.id === optionId)) return null;
+    const dropboxId = url.searchParams.get("dropbox");
+    if (serviceId !== "oligo" && dropboxId && /^[a-zA-Z0-9_-]{1,100}$/.test(dropboxId)) return dropboxOrderUrl(serviceId, dropboxId, optionId || undefined);
     return orderServiceUrl(serviceId, optionId || undefined);
   } catch { return null; }
 }

@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, Check, CircleDot, Dna, FlaskConical, Waves } fro
 import Link from "next/link";
 
 import { ORDER_SERVICES, orderServiceUrl, type OrderService, type ServiceOption } from "@/lib/order-services";
+import { dropboxOrderUrl } from "@/lib/dropboxes";
 
 export function OrderSteps({ service, option }: { service?: OrderService; option?: ServiceOption }) {
   const details = !!service && (!service.options.length || !!option);
@@ -17,7 +18,7 @@ export function OrderSteps({ service, option }: { service?: OrderService; option
   </ol></nav>;
 }
 
-export function ServicePicker() {
+export function ServicePicker({ dropboxId }: { dropboxId?: string } = {}) {
   return <>
     <header className="order-picker-heading">
       <p className="eyebrow">New order</p>
@@ -27,7 +28,7 @@ export function ServicePicker() {
     <div className="order-service-grid">
       {ORDER_SERVICES.map((service, index) => {
         const Icon = service.id === "oligo" ? Dna : service.id === "whole-plasmid" ? CircleDot : Waves;
-        return <Link key={service.id} href={orderServiceUrl(service.id)} className={`order-service-card order-service-${service.id}`}>
+        return <Link key={service.id} href={dropboxId ? dropboxOrderUrl(service.id, dropboxId) : orderServiceUrl(service.id)} className={`order-service-card order-service-${service.id}`}>
           <div className="order-service-art" aria-hidden="true"><span className="order-service-number">0{index + 1}</span><Icon strokeWidth={1.25} /><span className="order-service-motif">{service.id === "oligo" ? "A · T · G · C" : service.id === "whole-plasmid" ? "INSERT + BACKBONE" : "ONE REGION. CLEAR ANSWERS."}</span></div>
           <div className="order-service-content"><h2>{service.name}</h2><p>{service.description}</p><span className="order-service-caption">{service.caption}</span><span className="order-service-action">Select service <ArrowRight size={18} aria-hidden="true" /></span></div>
         </Link>;
@@ -37,7 +38,7 @@ export function ServicePicker() {
   </>;
 }
 
-export function ServiceOptions({ service }: { service: OrderService }) {
+export function ServiceOptions({ service, dropboxId }: { service: OrderService; dropboxId?: string }) {
   return <>
     <Link href={orderServiceUrl()} className="order-back"><ArrowLeft size={16} aria-hidden="true" /> All services</Link>
     <header className="order-picker-heading">
@@ -46,7 +47,7 @@ export function ServiceOptions({ service }: { service: OrderService }) {
       <p>{service.id === "sanger" ? "Choose your submission type. You’ll select tubes or plates in the next step." : "Choose standard or modified DNA to continue."}</p>
     </header>
     <div className={`order-options-grid ${service.options.length === 2 ? "order-options-two" : ""}`}>
-      {service.options.map((option, index) => <Link key={option.id} href={orderServiceUrl(service.id, option.id)} className="order-option-card">
+      {service.options.map((option, index) => <Link key={option.id} href={dropboxId ? dropboxOrderUrl(service.id, dropboxId, option.id) : orderServiceUrl(service.id, option.id)} className="order-option-card">
         <span className="order-option-number">0{index + 1}</span>
         <h2>{option.name}</h2><p>{option.description}</p>
         <span className="order-service-action">Continue <ArrowRight size={18} aria-hidden="true" /></span>

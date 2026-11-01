@@ -10,6 +10,7 @@ import {
   UserRound,
   UsersRound,
   DollarSign,
+  MapPin,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,6 +31,7 @@ const customerNavigation = [
   { href: "/orders", label: "Orders", icon: ClipboardList },
   { href: "/orders/new", label: "New order", icon: Plus },
   { href: "/account", label: "Account", icon: UserRound },
+  { href: "/dropboxes", label: "Dropboxes", icon: MapPin },
 ];
 
 const adminNavigation = [
@@ -37,6 +39,7 @@ const adminNavigation = [
   { href: "/admin/orders", label: "Orders", icon: ClipboardList },
   { href: "/admin/pricing", label: "Pricing", icon: DollarSign },
   { href: "/admin/customers", label: "Customers", icon: UsersRound },
+  { href: "/admin/dropboxes", label: "Dropboxes", icon: MapPin },
   { href: "/admin#results", label: "Results", icon: FlaskConical },
 ];
 

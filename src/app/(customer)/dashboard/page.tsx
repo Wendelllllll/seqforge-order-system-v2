@@ -10,7 +10,7 @@ import { requireCustomer } from "@/lib/session";
 
 export default async function DashboardPage() {
   const session = await requireCustomer();
-  const [orders, totalOrders, activeOrders, completedOrders] = await Promise.all([
+  const [orders, totalOrders, activeOrders, completedOrders, heldOrders] = await Promise.all([
     prisma.order.findMany({
       where: { userId: session.user.id },
       include: { _count: { select: { samples: true } } },
@@ -20,6 +20,7 @@ export default async function DashboardPage() {
     prisma.order.count({ where: { userId: session.user.id } }),
     prisma.order.count({ where: { userId: session.user.id, status: { not: "COMPLETED" } } }),
     prisma.order.count({ where: { userId: session.user.id, status: "COMPLETED" } }),
+    prisma.order.findMany({ where: { userId: session.user.id, status: "ON_HOLD" }, select: { id: true, orderNumber: true }, orderBy: { updatedAt: "desc" }, take: 5 }),
   ]);
 
   return (
@@ -51,6 +52,8 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {heldOrders.length > 0 && <section className="mt-6 border border-rose-200 bg-rose-50 p-5 text-rose-950"><h2 className="font-bold">Orders need your attention</h2><p className="mt-2 text-sm">Please open each order to read the lab’s message and next steps.</p><div className="mt-3 flex flex-wrap gap-3">{heldOrders.map(order => <Link key={order.id} href={`/orders/${order.id}`} className="button-secondary font-mono text-xs">{order.orderNumber}</Link>)}</div></section>}
 
       <section className="panel mt-8">
         <div className="panel-heading items-center">

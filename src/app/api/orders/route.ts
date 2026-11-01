@@ -7,13 +7,15 @@ import { issueLabel, orderSchema } from "@/lib/order-intake";
 import { prisma } from "@/lib/prisma";
 import { PriceChanged } from "@/lib/pricing-store";
 import { getEffectiveRateSchedule } from "@/lib/customer-pricing-store";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
+import { DropboxChanged } from "@/lib/dropbox-store";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session || session.user.role === "admin") return Response.json({ error: "You must be signed in as a customer." }, { status: 401 });
   const submissionKey = request.headers.get("Idempotency-Key") || "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(submissionKey)) return Response.json({ error: "Reload the order form to start a valid submission." }, { status: 400 });
-  if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!hasTrustedRequestOrigin(request)) return Response.json({ error: "Invalid request origin." }, { status: 403 });
   let body: unknown;
   try {
     const text = await request.text();
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
     after(() => safeDispatchCustomerNotifications(prisma));
     return Response.json(order, { status: 201 });
   } catch (error) {
+    if (error instanceof DropboxChanged) return Response.json({ code: "DROPBOX_CHANGED", error: error.message }, { status: 409 });
     if (error instanceof AccountChanged) return Response.json({ code: "ACCOUNT_CHANGED", error: error.message }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     if (error instanceof PriceChanged) return Response.json({ code: "PRICE_CHANGED", error: error.message, schedule: error.schedule }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     if (error instanceof SubmissionConflict) return Response.json({ error: error.message }, { status: 409 });

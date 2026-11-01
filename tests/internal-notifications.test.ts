@@ -5,6 +5,9 @@ import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import "dotenv/config";
 import { sendInternalMail, type InternalMailTransportFactory } from "../src/lib/internal-mail";
+import { dispatchCustomerNotifications, enqueueCustomerNotification, type CustomerNotification } from "../src/lib/customer-notifications";
+import { type sendCustomerMail } from "../src/lib/customer-mail";
+import { OrderStatusError, setOrderStatus } from "../src/lib/order-status";
 import {
   dispatchInternalNotifications,
   enqueueInternalNotification,
@@ -31,6 +34,9 @@ test("internal notifications persist safely in an isolated database without send
     SMTP_PORT: "465",
     SMTP_USER: "test-user",
     SMTP_PASSWORD: "test-password-never-used",
+    CUSTOMER_MAIL_MODE: "smtp",
+    CUSTOMER_MAIL_FROM: "notifications@example.invalid",
+    CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "customer@example.invalid",
     BETTER_AUTH_URL: "http://localhost:43210",
     NODE_ENV: "development",
   };
@@ -219,6 +225,235 @@ test("internal notifications persist safely in an isolated database without send
       assert.equal(transportCreated, 1);
       assert.deepEqual(capturedRecipients, [mailEnvironment.INTERNAL_MAIL_TO]);
       await clearQueue();
+    });
+
+    for (const timezone of ["America/Los_Angeles", "UTC"]) {
+      await t.test(`customer verification expiry uses database time in ${timezone}`, async () => {
+        await db.$transaction(async tx => {
+          await tx.$executeRaw`SELECT set_config('TimeZone', ${timezone}, true)`;
+          const [settings] = await tx.$queryRaw<{ timezone: string }[]>`SELECT current_setting('TimeZone') AS timezone`;
+          assert.equal(settings.timezone, timezone);
+
+          const sent: string[] = [];
+          const sender: typeof sendCustomerMail = async message => {
+            sent.push(message.id);
+            return { status: "accepted", messageId: "fake-customer-message" };
+          };
+          for (const scenario of [
+            { name: "future", kind: "VERIFY_EMAIL", expiresAt: new Date(Date.now() + 60 * 60 * 1000), expired: false },
+            { name: "past", kind: "VERIFY_EMAIL", expiresAt: new Date(Date.now() - 60 * 60 * 1000), expired: true },
+            { name: "no expiry", kind: "ORDER_CONFIRMATION", expiresAt: undefined, expired: false },
+          ] as const) {
+            const id = await enqueueCustomerNotification(tx, {
+              eventKey: `timezone:${randomUUID()}`, userId: "isolated-customer", kind: scenario.kind,
+              recipient: "customer@example.invalid", subject: `Isolated ${scenario.name} notification`,
+              text: "An isolated notification fixture.", expiresAt: scenario.expiresAt,
+            });
+            assert.ok(id);
+            const sentBefore = sent.length;
+            assert.deepEqual(await dispatchCustomerNotifications(tx, 1, sender, id), {
+              accepted: scenario.expired ? 0 : 1,
+              failed: scenario.expired ? 1 : 0,
+            });
+            assert.equal(sent.length, sentBefore + (scenario.expired ? 0 : 1));
+            if (!scenario.expired) assert.equal(sent.at(-1), id);
+            const [row] = await tx.$queryRaw<{ status: string; lastError: string | null; attempts: number }[]>`
+              SELECT "status", "lastError", "attempts" FROM "CustomerNotification" WHERE "id" = ${id}`;
+            assert.equal(row.status, scenario.expired ? "FAILED" : "SENT");
+            assert.equal(row.lastError, scenario.expired ? "VERIFICATION_EXPIRED" : null);
+            assert.equal(row.attempts, 1);
+            assert.deepEqual(await dispatchCustomerNotifications(tx, 1, sender, id), { accepted: 0, failed: 0 });
+            assert.equal(sent.length, sentBefore + (scenario.expired ? 0 : 1));
+          }
+        });
+      });
+    }
+
+    await t.test("result release is atomic, requires a file and notifies only the ordering customer once", async () => {
+      process.env.CUSTOMER_MAIL_MODE = "preview";
+      await db.$executeRaw`DELETE FROM "CustomerNotification"`;
+      const resultMessages = () => db.$queryRaw<CustomerNotification[]>`SELECT * FROM "CustomerNotification"`;
+      const resultMessage = async (orderId: string) => {
+        const message = (await resultMessages()).find(row => row.eventKey === `result-ready:${orderId}`);
+        assert.ok(message);
+        return message;
+      };
+      const messageCount = async (orderId?: string) => (await resultMessages()).filter(row => !orderId || row.eventKey === `result-ready:${orderId}`).length;
+      const customer = await db.user.create({ data: {
+        id: randomUUID(), name: "Result Customer", email: "customer@example.invalid", emailVerified: true,
+        firstName: "Result", lastName: "Customer", organization: "Isolated tests", labName: "Isolated lab",
+      } });
+      const makeOrder = (service = "SANGER", status = "QC", withFile = true) => db.order.create({ data: {
+        userId: customer.id, orderNumber: `TEST-${randomUUID()}`, orderName: "Private sample names must not appear in mail", service, status,
+        fulfillmentSnapshot: { billingEmail: "billing@example.invalid", sharedResultEmails: ["colleague@example.invalid"] },
+        ...(withFile ? { result: { create: { originalName: "private-sequences.fasta", storedName: `${randomUUID()}.fasta`, mimeType: "text/plain", size: 10 } } } : {}),
+      } });
+      const withoutFile = await makeOrder("SANGER", "QC", false);
+      await assert.rejects(setOrderStatus(db, withoutFile.id, "COMPLETED"), error => error instanceof OrderStatusError && error.status === 409);
+      assert.equal((await db.order.findUniqueOrThrow({ where: { id: withoutFile.id } })).status, "QC");
+      assert.equal(await messageCount(), 0);
+
+      const oligo = await makeOrder("OLIGO", "RECEIVED", false);
+      await assert.rejects(setOrderStatus(db, oligo.id, "COMPLETED"), error => error instanceof OrderStatusError && error.status === 409);
+
+      const historical = await makeOrder("WHOLE_PLASMID", "COMPLETED");
+      assert.deepEqual(await setOrderStatus(db, historical.id, "COMPLETED"), { status: "COMPLETED", changed: false, revision: 0 });
+      assert.equal(await messageCount(), 0, "Existing completed orders are not backfilled");
+
+      const order = await makeOrder();
+      process.env.BETTER_AUTH_URL = "invalid origin";
+      await assert.rejects(setOrderStatus(db, order.id, "COMPLETED"));
+      assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).status, "QC", "Enqueue failure rolls back the status");
+      assert.equal(await db.statusHistory.count({ where: { orderId: order.id } }), 0);
+      assert.equal(await messageCount(), 0);
+      process.env.BETTER_AUTH_URL = "https://portal.example.test";
+
+      const changes = await Promise.all(Array.from({ length: 8 }, () => setOrderStatus(db, order.id, "COMPLETED")));
+      assert.equal(changes.filter(result => result.changed).length, 1);
+      const message = await resultMessage(order.id);
+      assert.equal(message.kind, "RESULT_READY");
+      assert.equal(message.userId, customer.id);
+      assert.equal(message.recipient, customer.email);
+      assert.equal(message.status, "PREVIEW");
+      assert.match(message.bodyText, /Sanger sequencing/);
+      assert.ok(message.bodyText.includes(order.orderNumber));
+      assert.ok(message.bodyText.includes(`https://portal.example.test/orders/${order.id}`));
+      for (const privateValue of ["billing@example.invalid", "colleague@example.invalid", order.orderName, "private-sequences.fasta"]) assert.ok(!message.bodyText.includes(privateValue));
+      assert.equal(await db.statusHistory.count({ where: { orderId: order.id, status: "COMPLETED" } }), 1);
+      await setOrderStatus(db, order.id, "QC");
+      await setOrderStatus(db, order.id, "COMPLETED");
+      assert.equal(await messageCount(order.id), 1, "Reopening and completing does not resend");
+
+      process.env.CUSTOMER_MAIL_MODE = "smtp";
+      let sends = 0;
+      const sender: typeof sendCustomerMail = async mail => {
+        sends++;
+        assert.equal(mail.recipient, customer.email);
+        return { status: "accepted", messageId: "fake-results-ready" };
+      };
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, sender), { accepted: 0, failed: 0 }, "Preview messages never become live mail");
+      const wholePlasmid = await makeOrder("WHOLE_PLASMID");
+      await setOrderStatus(db, wholePlasmid.id, "COMPLETED");
+      const wholeMail = await resultMessage(wholePlasmid.id);
+      assert.match(wholeMail.bodyText, /Whole Plasmid Sequencing/);
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, sender), { accepted: 1, failed: 0 }, "The regular dispatcher includes result-ready notifications");
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, sender), { accepted: 0, failed: 0 });
+      assert.equal(sends, 1);
+
+      const failedDeliveryOrder = await makeOrder();
+      await setOrderStatus(db, failedDeliveryOrder.id, "COMPLETED");
+      const failingSender: typeof sendCustomerMail = async () => { throw new Error("Fake SMTP outage"); };
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, failingSender), { accepted: 0, failed: 1 });
+      assert.equal((await db.order.findUniqueOrThrow({ where: { id: failedDeliveryOrder.id } })).status, "COMPLETED", "SMTP failure does not roll back a released result");
+      assert.equal((await resultMessage(failedDeliveryOrder.id)).status, "FAILED");
+      await setOrderStatus(db, failedDeliveryOrder.id, "COMPLETED");
+      assert.equal(await messageCount(failedDeliveryOrder.id), 1);
+
+      const withdrawnOrder = await makeOrder();
+      await setOrderStatus(db, withdrawnOrder.id, "COMPLETED");
+      const pendingResult = await resultMessage(withdrawnOrder.id);
+      const actor = { id: "isolated-result-admin", name: "Result reviewer" };
+      await setOrderStatus(db, withdrawnOrder.id, "ON_HOLD", { reason: "The file needs another review. Please wait for a lab update.", expectedRevision: 1, requestKey: randomUUID(), actor });
+      const dispatched: string[] = [];
+      const heldSender: typeof sendCustomerMail = async message => { dispatched.push(message.id); return { status: "accepted", messageId: "fake-held-result" }; };
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, heldSender), { accepted: 1, failed: 0 }, "The hold notification can send while result-ready remains paused");
+      assert.ok(!dispatched.includes(pendingResult.id));
+      assert.equal((await resultMessage(withdrawnOrder.id)).status, "PENDING");
+      await setOrderStatus(db, withdrawnOrder.id, "QC", { reason: "The hold is resolved. QC review continues.", expectedRevision: 2, requestKey: randomUUID(), actor });
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, heldSender), { accepted: 1, failed: 0 }, "Resolution does not send a result-ready email before release");
+      assert.ok(!dispatched.includes(pendingResult.id));
+      await setOrderStatus(db, withdrawnOrder.id, "COMPLETED");
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, heldSender), { accepted: 1, failed: 0 });
+      assert.equal(dispatched.filter(id => id === pendingResult.id).length, 1, "Recompletion dispatches the original pending result notification once");
+      assert.equal((await resultMessage(withdrawnOrder.id)).status, "SENT");
+      assert.equal(await messageCount(withdrawnOrder.id), 1);
+      process.env.BETTER_AUTH_URL = mailEnvironment.BETTER_AUTH_URL;
+    });
+
+    await t.test("order holds require customer instructions, preserve data and have audited idempotent resolution", async () => {
+      process.env.CUSTOMER_MAIL_MODE = "smtp";
+      process.env.CUSTOMER_MAIL_ALLOWED_RECIPIENTS = "exception@example.invalid";
+      await db.$executeRaw`DELETE FROM "CustomerNotification"`;
+      const customer = await db.user.create({ data: {
+        id: randomUUID(), name: "Exception Customer", email: "exception@example.invalid", emailVerified: true,
+        firstName: "Exception", lastName: "Customer", organization: "Isolated tests", labName: "Isolated lab",
+      } });
+      const actor = { id: "isolated-lab-admin", name: "Lab administrator" };
+      const order = await db.order.create({ data: {
+        userId: customer.id, orderNumber: `HOLD-${randomUUID()}`, orderName: "Unchanged order", status: "QC",
+        pricingSnapshot: { subtotalCents: 550 }, fulfillmentSnapshot: { billingEmail: "billing@example.invalid" },
+        samples: { create: { position: 0, sampleName: "Unchanged sample", templateType: "Plasmid DNA", primerName: "T7", primerSource: "Customer supplied" } },
+        result: { create: { originalName: "private-result.txt", storedName: `${randomUUID()}.txt`, mimeType: "text/plain", size: 10 } },
+      } });
+      const options = { reason: "Tube A label does not match the order. Please confirm the correct sample name with the lab.", expectedRevision: 0, requestKey: randomUUID(), actor };
+      await assert.rejects(setOrderStatus(db, order.id, "ON_HOLD"), error => error instanceof OrderStatusError && error.status === 400);
+      await assert.rejects(setOrderStatus(db, order.id, "ON_HOLD", { ...options, reason: "   " }), error => error instanceof OrderStatusError && error.status === 400);
+      await assert.rejects(setOrderStatus(db, order.id, "ON_HOLD", { ...options, expectedRevision: 2 }), error => error instanceof OrderStatusError && error.status === 409);
+      assert.equal(await db.statusHistory.count({ where: { orderId: order.id } }), 0);
+
+      const held = await Promise.all(Array.from({ length: 6 }, () => setOrderStatus(db, order.id, "ON_HOLD", options)));
+      assert.equal(held.filter(result => result.changed).length, 1);
+      assert.ok(held.every(result => result.status === "ON_HOLD" && result.revision === 1));
+      const saved = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { samples: true, statusHistory: true } });
+      assert.equal(saved.holdReason, options.reason);
+      assert.equal(saved.holdPreviousStatus, "QC");
+      assert.deepEqual(saved.pricingSnapshot, { subtotalCents: 550 });
+      assert.equal(saved.samples[0].sampleName, "Unchanged sample");
+      assert.equal(saved.statusHistory.length, 1);
+      assert.equal(saved.statusHistory[0].actorId, actor.id);
+      assert.equal(saved.statusHistory[0].actorName, actor.name);
+      assert.equal(saved.statusHistory[0].previousStatus, "QC");
+      assert.equal(saved.statusHistory[0].note, options.reason);
+      await assert.rejects(setOrderStatus(db, order.id, "ON_HOLD", { ...options, reason: "Different instructions" }), error => error instanceof OrderStatusError && error.status === 409);
+      await assert.rejects(setOrderStatus(db, order.id, "COMPLETED", { ...options, expectedRevision: 1, requestKey: randomUUID() }), error => error instanceof OrderStatusError && error.status === 409);
+      await assert.rejects(setOrderStatus(db, order.id, "QC"), error => error instanceof OrderStatusError && error.status === 400);
+
+      const updates = await Promise.allSettled(["Please send a photo of the tube label.", "Please confirm the sample ID by email."].map(reason =>
+        setOrderStatus(db, order.id, "ON_HOLD", { reason, expectedRevision: 1, requestKey: randomUUID(), actor })));
+      assert.equal(updates.filter(result => result.status === "fulfilled").length, 1);
+      const staleUpdate = updates.find(result => result.status === "rejected");
+      assert.ok(staleUpdate?.status === "rejected" && staleUpdate.reason instanceof OrderStatusError && staleUpdate.reason.status === 409);
+      assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).holdPreviousStatus, "QC", "Editing the message preserves the original working stage");
+
+      const resolve = { reason: "The sample name has been confirmed. The lab will continue its review.", expectedRevision: 2, requestKey: randomUUID(), actor };
+      assert.deepEqual(await setOrderStatus(db, order.id, "QC", resolve), { status: "QC", changed: true, revision: 3 });
+      assert.deepEqual(await setOrderStatus(db, order.id, "QC", resolve), { status: "QC", changed: false, revision: 3 });
+      assert.deepEqual(await setOrderStatus(db, order.id, "ON_HOLD", options), { status: "QC", changed: false, revision: 3 }, "A delayed retry cannot reopen the resolved hold");
+      const resumed = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { statusHistory: true } });
+      assert.equal(resumed.holdReason, null);
+      assert.equal(resumed.holdPreviousStatus, null);
+      assert.equal(resumed.statusHistory.length, 3);
+
+      const messages = await db.$queryRaw<CustomerNotification[]>`SELECT * FROM "CustomerNotification" ORDER BY "createdAt"`;
+      assert.equal(messages.filter(message => message.kind === "ORDER_ATTENTION").length, 2);
+      assert.equal(messages.filter(message => message.kind === "ORDER_RESUMED").length, 1);
+      for (const message of messages) {
+        assert.equal(message.recipient, customer.email);
+        assert.equal(message.userId, customer.id);
+        assert.ok(message.bodyText.includes(order.orderNumber));
+        assert.ok(message.bodyText.includes(`/orders/${order.id}`));
+        assert.ok(!message.bodyText.includes("billing@example.invalid"));
+        assert.ok(!message.bodyText.includes("private-result.txt"));
+      }
+      const sends: string[] = [];
+      const sender: typeof sendCustomerMail = async message => { sends.push(message.id); return { status: "accepted", messageId: "fake-attention" }; };
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, sender), { accepted: 3, failed: 0 });
+      assert.deepEqual(await dispatchCustomerNotifications(db, 20, sender), { accepted: 0, failed: 0 });
+      assert.equal(new Set(sends).size, 3);
+
+      await setOrderStatus(db, order.id, "COMPLETED");
+      const completed = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+      await setOrderStatus(db, order.id, "ON_HOLD", { reason: "A result needs a further check. Please wait for the lab update.", expectedRevision: completed.statusRevision, requestKey: randomUUID(), actor });
+      assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).holdPreviousStatus, "QC", "A hold on a published order resumes at QC, never directly at Completed");
+
+      for (const service of ["WHOLE_PLASMID", "OLIGO"]) {
+        const other = await db.order.create({ data: { userId: customer.id, orderNumber: `HOLD-${randomUUID()}`, orderName: "Service hold", service, status: "RECEIVED" } });
+        await setOrderStatus(db, other.id, "ON_HOLD", { ...options, requestKey: randomUUID() });
+        if (service === "OLIGO") await assert.rejects(setOrderStatus(db, other.id, "PROCESSING", { ...resolve, expectedRevision: 1, requestKey: randomUUID() }), error => error instanceof OrderStatusError && error.status === 409);
+        await setOrderStatus(db, other.id, "RECEIVED", { ...resolve, expectedRevision: 1, requestKey: randomUUID() });
+        assert.equal((await db.order.findUniqueOrThrow({ where: { id: other.id } })).status, "RECEIVED");
+      }
+      process.env.CUSTOMER_MAIL_ALLOWED_RECIPIENTS = mailEnvironment.CUSTOMER_MAIL_ALLOWED_RECIPIENTS;
     });
 
     await t.test("customer notification failures do not turn saved signup into an error", async () => {

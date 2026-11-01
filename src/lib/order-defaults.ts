@@ -1,9 +1,12 @@
 import { z } from "zod";
+import { dropboxSnapshotSchema } from "./dropboxes";
 
 export const PAYMENT_METHODS = ["Invoice", "Purchase order"] as const;
-export const DELIVERY_METHODS = ["Pickup", "Ship to SeqForge"] as const;
+export const DELIVERY_METHODS = ["Pickup", "Dropbox", "Ship to SeqForge"] as const;
 export const orderDefaultsSchema = z.object({
   deliveryMethod: z.enum(DELIVERY_METHODS),
+  dropboxId: z.string().trim().max(100).optional(),
+  dropbox: dropboxSnapshotSchema.optional(),
   pickupLocation: z.string().trim().max(500),
   pickupInstructions: z.string().trim().max(500),
   contactName: z.string().trim().max(120),

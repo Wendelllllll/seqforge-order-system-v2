@@ -41,7 +41,7 @@ export default async function OrdersPage() {
                     <td>{formatDate(order.createdAt)}</td>
                     <td>{order.service === "OLIGO" ? <>{oligoCount(order.oligoSnapshot)} oligos</> : <>{order.samples.length} samples{order.service !== "WHOLE_PLASMID" && <> / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)} reactions</>}</>}</td>
                     <td><StatusBadge status={order.status} /></td>
-                    <td>{order.result ? <span className="font-semibold text-emerald-700">Available</span> : <span className="text-slate-400">—</span>}</td>
+                    <td>{order.status === "COMPLETED" && order.result ? <span className="font-semibold text-emerald-700">Available</span> : <span className="text-slate-400">—</span>}</td>
                     <td><Link href={`/orders/${order.id}`} className="font-bold text-cyan-700 hover:text-cyan-900">View</Link></td>
                   </tr>
                 ))}

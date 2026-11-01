@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { CustomerMailError, getCustomerMailConfig } from "@/lib/customer-mail";
 import { dispatchCustomerNotifications, VerificationCooldown } from "@/lib/customer-notifications";
 import { safeVerificationReturn } from "@/lib/verification-return";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
 
 const noStore = { "Cache-Control": "private, no-store" };
 
@@ -15,8 +16,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (origin !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403, headers: noStore });
+  if (!hasTrustedRequestOrigin(request)) return Response.json({ error: "Invalid request origin." }, { status: 403, headers: noStore });
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return Response.json({ error: "Please sign in to verify your email." }, { status: 401, headers: noStore });
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, email: true, emailVerified: true } });

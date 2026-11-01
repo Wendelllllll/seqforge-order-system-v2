@@ -69,7 +69,7 @@ export function EmailVerification({ email, initiallyVerified, next, linkError }:
       const result = await response.json();
       if (result.email !== email) { window.location.reload(); return; }
       if (result.verified === true) { setVerified(true); setError(""); setNotice(""); }
-      else if (!quiet) setNotice("Not verified yet. Open the link in your email, then come back here.");
+      else if (!quiet) setNotice("Not verified yet. Open the link in your email and select Confirm my email, then come back here.");
     } catch {
       if (!quiet) setNotice("We couldn't check your email status. Check your connection and try again.");
     } finally { checkInFlight.current = false; if (!quiet) setChecking(false); }
@@ -108,11 +108,11 @@ export function EmailVerification({ email, initiallyVerified, next, linkError }:
 
   // Artwork reflects real verification state without changing account status.
   // Preserve the verification, resend, account and draft-return behavior above.
-  const title = signedOut ? "Sign in to verify your email" : verified ? "Email verified" : "Verify your email";
+  const title = signedOut ? "Continue to your account" : verified ? "Email verified" : "Verify your email";
   const description = signedOut
-    ? "Sign in to your SeqForge account to confirm your email address and continue."
+    ? "Sign in to check your email verification status and continue. If you confirmed on another device, you can also return to your original browser."
     : verified ? "Your email address has been confirmed. You can continue to your account or review your order."
-      : "Confirm your email address before submitting your first order. Open the verification link in your inbox, then return here to continue.";
+      : "Confirm your email address before submitting your first order. Open the verification link in your inbox and select Confirm my email, then return here to continue.";
 
   return <main className={`${styles.page} ${verified ? styles.verified : ""}`}>
     <header className={styles.header}><Brand /><Link href="/contact" className={styles.help}><CircleHelp size={17} /> Contact support</Link></header>
@@ -138,7 +138,7 @@ export function EmailVerification({ email, initiallyVerified, next, linkError }:
             {!signedOut && !verified && delivery === "sent" && <p className={styles.sentMessage}><Check size={15} /> Verification email sent. Check your inbox and spam folder.</p>}
             {!signedOut && !verified && delivery === "sending" && <p className={styles.sendingMessage}><LoaderCircle size={15} className={styles.spinner} /> Sending your verification link…</p>}
             {!signedOut && !verified && delivery === "preview" && <p className={styles.notice}>Email preview is enabled for this test environment. No email was sent.</p>}
-            {!signedOut && !verified && error && <p role="alert" className={styles.error}>{error}</p>}
+            {(signedOut || !verified) && error && <p role="alert" className={styles.error}>{error}</p>}
             {!signedOut && !verified && notice && <p className={styles.notice}>{notice}</p>}
           </div>
 

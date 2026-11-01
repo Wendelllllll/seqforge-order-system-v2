@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { reactionCount, type OrderDraft } from "./order-intake";
 import { DEFAULT_SCHEDULE, plasmidRateFor, RATE_ITEMS, rateFor, WHOLE_PLASMID_SIZE_LIMIT_BP, type RateKey, type RateSchedule } from "./rate-schedule";
-import { OLIGO_QUOTE_NOTICE } from "./oligo-schema";
+import { hasStandardOligoPrice, MAX_OLIGOS, OLIGO_BASE_PRICE_NOTICE, OLIGO_BASE_RATE_CENTS, oligoSchema } from "./oligo-schema";
 
 export const PRICING_VERSION = "seqforge-v3-2026-09";
 export const RATE_CENTS = {
@@ -9,11 +9,15 @@ export const RATE_CENTS = {
   Tubes: { Standard: 550, "Pre-mixed": 450, "Ready to load": 350 },
 } as const;
 export const WHOLE_PLASMID_UNIT_CENTS = 500;
+export const OLIGO_PRICING_VERSION = "seqforge-oligo-standard-25c-2026-10";
 
 export const pricingSchema = z.object({
   version: z.string(), currency: z.literal("USD"),
-  unit: z.enum(["reaction", "sample", "oligo"]).default("reaction"),
+  unit: z.enum(["reaction", "sample", "oligo", "base"]).default("reaction"),
   pendingQuote: z.boolean().optional(),
+  quoteApprovalRequired: z.boolean().optional(),
+  knownSubtotalCents: z.number().int().positive().optional(),
+  unpricedItems: z.array(z.string()).max(MAX_OLIGOS).optional(),
   customerPricingRevision: z.number().int().nonnegative().optional(),
   lines: z.array(z.object({
     description: z.string(), quantity: z.number().int().positive(),
@@ -22,7 +26,12 @@ export const pricingSchema = z.object({
   })),
   subtotalCents: z.number().int().nonnegative().nullable(),
   reviewReasons: z.array(z.string()),
-}).refine(price => price.pendingQuote ? price.subtotalCents === null && price.lines.length === 0 : price.subtotalCents !== null, "Pending quotes cannot have a charge; priced orders require a subtotal.");
+}).refine(price => {
+  if (!price.pendingQuote) return price.subtotalCents !== null && price.knownSubtotalCents === undefined && !price.unpricedItems?.length;
+  if (price.subtotalCents !== null) return false;
+  if (price.knownSubtotalCents === undefined) return price.lines.length === 0;
+  return price.unit === "base" && !!price.unpricedItems?.length && price.lines.length > 0 && price.knownSubtotalCents === price.lines.reduce((sum, line) => sum + line.amountCents, 0);
+}, "Pending quotes must keep the final subtotal unknown; any known subtotal covers priced standard oligos only.");
 export type Pricing = z.infer<typeof pricingSchema>;
 
 function rateVersion(schedule: RateSchedule) {
@@ -34,8 +43,14 @@ function customerContext(schedule?: RateSchedule) {
 
 export function priceOrder(order: OrderDraft, schedule?: RateSchedule): Pricing {
   if (order.service === "OLIGO") {
-    if (!["Oligo standard", "Oligo modified"].includes(order.submissionMode) || !order.oligos?.length || order.oligos.length > 250) throw new Error("Invalid oligo order.");
-    return { version: "seqforge-oligo-quote-2026-10", currency: "USD", unit: "oligo", pendingQuote: true, lines: [], subtotalCents: null, reviewReasons: [OLIGO_QUOTE_NOTICE] };
+    if (!["Oligo standard", "Oligo modified"].includes(order.submissionMode)) throw new Error("Invalid oligo order.");
+    // Normalize and validate again here so billing never counts whitespace,
+    // modification text, or invalid letters as DNA bases.
+    const items = z.array(oligoSchema).min(1).max(MAX_OLIGOS).parse(order.oligos);
+    const lines = items.filter(hasStandardOligoPrice).map(item => ({ description: `${item.name} · Standard DNA, 25 nmol, Desalted`, quantity: item.sequence.length, unitCents: OLIGO_BASE_RATE_CENTS, amountCents: item.sequence.length * OLIGO_BASE_RATE_CENTS }));
+    const unpricedItems = items.filter(item => !hasStandardOligoPrice(item)).map(item => item.name);
+    const standardSubtotal = lines.reduce((sum, line) => sum + line.amountCents, 0);
+    return { version: OLIGO_PRICING_VERSION, currency: "USD", unit: "base", pendingQuote: !!unpricedItems.length, quoteApprovalRequired: true, lines, subtotalCents: unpricedItems.length ? null : standardSubtotal, ...(unpricedItems.length ? { unpricedItems, ...(lines.length ? { knownSubtotalCents: standardSubtotal } : {}) } : {}), reviewReasons: [OLIGO_BASE_PRICE_NOTICE] };
   }
   if (order.service === "WHOLE_PLASMID") {
     if (order.submissionMode !== "Whole plasmid" || order.samples.length < 1 || order.samples.length > 250) throw new Error("Invalid whole plasmid order.");

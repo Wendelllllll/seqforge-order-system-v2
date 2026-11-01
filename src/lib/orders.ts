@@ -1,4 +1,4 @@
-export const ORDER_STATUSES = [
+export const ORDER_PROGRESS_STATUSES = [
   "SUBMITTED",
   "RECEIVED",
   "PROCESSING",
@@ -6,6 +6,7 @@ export const ORDER_STATUSES = [
   "QC",
   "COMPLETED",
 ] as const;
+export const ORDER_STATUSES = [...ORDER_PROGRESS_STATUSES, "ON_HOLD"] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
@@ -16,6 +17,7 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   SEQUENCED: "Sequenced",
   QC: "QC",
   COMPLETED: "Completed",
+  ON_HOLD: "Needs attention",
 };
 
 export const TEMPLATE_TYPES = [

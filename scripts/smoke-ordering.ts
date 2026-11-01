@@ -4,6 +4,8 @@ import { PrismaClient } from "@prisma/client";
 import { blankOrder, blankReaction } from "../src/lib/order-intake";
 import { parseSangerPaste } from "../src/lib/sanger-entry";
 import { newPlasmidSample } from "../src/lib/whole-plasmid";
+import { runPasswordResetSmoke } from "./smoke-password-reset";
+import { runDropboxAttentionSmoke } from "./smoke-dropboxes-attention";
 
 // Only the isolated runner may supply the test server and disposable database schema.
 const origin = process.env.SEQFORGE_SMOKE_ORIGIN || "";
@@ -51,7 +53,7 @@ async function verifyCustomer(cookie: string, email: string, next: string, exerc
     }
     const sent = await request("/api/account/email-verification", cookie, { next, email: "forged-recipient@example.test" });
     assert.equal(sent.status, 200);
-    assert.deepEqual(await sent.json(), { ok: true, delivery: "preview" });
+    assert.deepEqual(await sent.json(), { ok: true, email, delivery: "preview" });
     const messages = await db.$queryRaw<{ bodyText: string; recipient: string; status: string; attempts: number }[]>`
       SELECT "bodyText", "recipient", "status", "attempts" FROM "CustomerNotification" WHERE "userId" = ${user.id} AND "kind" = 'VERIFY_EMAIL'`;
     assert.equal(messages.length, 1);
@@ -66,18 +68,89 @@ async function verifyCustomer(cookie: string, email: string, next: string, exerc
     assert.equal(callback.pathname, "/verify-email");
     assert.equal(callback.searchParams.get("next"), next, "Email links retain the selected order flow");
     assert.equal(callback.searchParams.get("verified"), "1");
+    const token = verification.searchParams.get("token");
+    assert.ok(token, "Preview mail must include a signed verification token");
+
+    async function confirmEmail(confirmationToken: string | undefined, returnTo = next, requestOrigin: string | null = origin) {
+      const body = new URLSearchParams({ next: returnTo });
+      if (confirmationToken !== undefined) body.set("token", confirmationToken);
+      return fetch(`${origin}/api/account/email-verification/confirm`, {
+        method: "POST", redirect: "manual",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", ...(requestOrigin === null ? {} : { origin: requestOrigin }) },
+        body,
+      });
+    }
+
+    function redirectLocation(response: Response, pathname: string) {
+      assert.equal(response.status, 303, "Verification transitions must use a redirect that returns to GET");
+      const location = response.headers.get("location");
+      assert.ok(location, "Verification transitions must include a destination");
+      const destination = new URL(location, origin);
+      assert.equal(destination.origin, origin, "Verification cannot redirect to another site");
+      assert.equal(destination.pathname, pathname);
+      return destination;
+    }
+
+    async function assertVerificationState(expected: boolean, action: string) {
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified, expected, action);
+      assert.equal(await db.order.count(), beforeOrders, `${action}: no order is submitted`);
+      assert.equal(await db.session.count({ where: { userId: user.id } }), beforeSessions, `${action}: no login session is created`);
+      const count = await db.$queryRaw<{ count: number }[]>`SELECT COUNT(*)::int AS count FROM "CustomerNotification" WHERE "userId" = ${user.id} AND "kind" = 'VERIFY_EMAIL'`;
+      assert.equal(count[0].count, 1, `${action}: no extra verification email is queued`);
+    }
+
+    // Email scanners can follow the link and render its destination. Neither
+    // GET nor HEAD, with or without the customer's session, confirms a mailbox.
+    const scanned = await fetch(verification, { redirect: "manual" });
+    const confirmation = redirectLocation(scanned, "/verify-email/confirm");
+    assert.equal(confirmation.searchParams.get("token"), token);
+    assert.equal(confirmation.searchParams.get("next"), next);
+    assert.equal(confirmation.searchParams.has("verified"), false);
+    assert.equal(scanned.headers.getSetCookie().length, 0);
+    const scannedHead = await fetch(verification, { method: "HEAD", redirect: "manual" });
+    assert.equal(redirectLocation(scannedHead, "/verify-email/confirm").toString(), confirmation.toString());
+    assert.equal(scannedHead.headers.getSetCookie().length, 0);
+    const signedInScan = await request(verification.pathname + verification.search, cookie);
+    assert.equal(redirectLocation(signedInScan, "/verify-email/confirm").toString(), confirmation.toString());
+    for (const pageCookie of ["", cookie]) {
+      const confirmationPage = await request(confirmation.pathname + confirmation.search, pageCookie);
+      assert.equal(confirmationPage.status, 200);
+      const html = await confirmationPage.text();
+      assert.ok(html.includes("Confirm my email"), "The email link displays a deliberate confirmation button");
+      const form = html.match(/<form\b[^>]*>[\s\S]*?<\/form>/gi)?.find(candidate => /action="\/api\/account\/email-verification\/confirm"/.test(candidate));
+      assert.ok(form, "Confirmation uses the dedicated form endpoint");
+      assert.ok(/<form\b[^>]*method="post"/i.test(form), "Confirmation requires a native POST form");
+      const inputs = form.match(/<input\b[^>]*>/gi) || [];
+      for (const name of ["token", "next"]) {
+        assert.ok(inputs.some(input => /type="hidden"/i.test(input) && input.includes(`name="${name}"`)), `Confirmation preserves ${name} as a hidden form field`);
+      }
+    }
+    await assertVerificationState(false, "Scanning an email link and its confirmation page does not verify the account");
+
     if (exerciseFailures) {
       const cooldown = await request("/api/account/email-verification", cookie, { next });
       assert.equal(cooldown.status, 429);
       assert.equal((await cooldown.json()).code, "VERIFICATION_COOLDOWN");
       assert.ok(Number(cooldown.headers.get("retry-after")) > 0);
 
-      const invalid = new URL(verification);
-      invalid.searchParams.set("token", "invalid-verification-token");
-      const invalidResponse = await request(invalid.pathname + invalid.search);
-      assert.ok([302, 303, 307].includes(invalidResponse.status));
-      assert.ok(new URL(invalidResponse.headers.get("location") || "", origin).searchParams.has("error"));
-      assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified, false);
+      for (const requestOrigin of [null, "https://untrusted.example", "null"]) {
+        assert.equal((await confirmEmail(token, next, requestOrigin)).status, 403, "Confirmation rejects missing, foreign and null origins");
+        await assertVerificationState(false, "An untrusted confirmation cannot verify the account");
+      }
+
+      const missingToken = new URL(verification);
+      missingToken.searchParams.delete("token");
+      const missingDestination = redirectLocation(await request(missingToken.pathname + missingToken.search), "/verify-email");
+      assert.equal(missingDestination.searchParams.get("error"), "INVALID_TOKEN");
+      assert.equal(missingDestination.searchParams.get("next"), next);
+
+      for (const invalidToken of [undefined, "", "invalid-verification-token", "x".repeat(4097)]) {
+        const invalidDestination = redirectLocation(await confirmEmail(invalidToken), "/verify-email");
+        assert.equal(invalidDestination.searchParams.get("error"), "INVALID_TOKEN");
+        assert.equal(invalidDestination.searchParams.get("next"), next);
+        assert.equal(invalidDestination.searchParams.has("token"), false);
+        await assertVerificationState(false, "An invalid confirmation cannot verify the account");
+      }
 
       const now = Math.floor(Date.now() / 1000);
       const unsigned = [
@@ -86,28 +159,52 @@ async function verifyCustomer(cookie: string, email: string, next: string, exerc
       ].join(".");
       const expired = new URL(verification);
       expired.searchParams.set("token", `${unsigned}.${createHmac("sha256", process.env.BETTER_AUTH_SECRET || "").update(unsigned).digest("base64url")}`);
-      const expiredResponse = await request(expired.pathname + expired.search);
-      assert.ok([302, 303, 307].includes(expiredResponse.status));
-      assert.match(new URL(expiredResponse.headers.get("location") || "", origin).searchParams.get("error") || "", /expired/i);
-      assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified, false);
+      const expiredLanding = redirectLocation(await request(expired.pathname + expired.search), "/verify-email/confirm");
+      assert.equal(expiredLanding.searchParams.get("token"), expired.searchParams.get("token"), "GET leaves token validation to the deliberate confirmation");
+      const expiredDestination = redirectLocation(await confirmEmail(expired.searchParams.get("token")!), "/verify-email");
+      assert.match(expiredDestination.searchParams.get("error") || "", /expired/i);
+      assert.equal(expiredDestination.searchParams.get("next"), next);
+      await assertVerificationState(false, "An expired confirmation cannot verify the account");
+
+      for (const unsafeCallback of ["https://untrusted.example/verify-email?next=/orders/new", "//untrusted.example/verify-email", `${origin}/admin`, `${origin}/verify-email?next=https://untrusted.example`]) {
+        const unsafeLink = new URL(verification);
+        unsafeLink.searchParams.set("callbackURL", unsafeCallback);
+        const safeLanding = redirectLocation(await request(unsafeLink.pathname + unsafeLink.search), "/verify-email/confirm");
+        assert.equal(safeLanding.searchParams.get("token"), token);
+        assert.equal(safeLanding.searchParams.get("next"), "/dashboard", "Untrusted callbacks fall back to the account dashboard");
+      }
+      for (const unsafeNext of ["https://untrusted.example", "//untrusted.example", "/admin"]) {
+        const safeFailure = redirectLocation(await confirmEmail("invalid-verification-token", unsafeNext), "/verify-email");
+        assert.equal(safeFailure.searchParams.get("next"), "/dashboard", "Confirmation sanitizes submitted return destinations");
+        assert.equal(safeFailure.searchParams.get("error"), "INVALID_TOKEN");
+      }
+      await assertVerificationState(false, "Invalid return paths and passive links cannot verify the account");
     }
 
-    // An email may open in another tab/browser. It verifies the mailbox but must
-    // not manufacture a login session or submit the user's saved draft.
-    const verified = await request(verification.pathname + verification.search);
-    assert.ok([302, 303, 307].includes(verified.status));
-    assert.equal(new URL(verified.headers.get("location") || "", origin).toString(), callback.toString());
-    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified, true);
+    // A deliberate confirmation can run in another browser without signing in,
+    // manufacturing a login session, or submitting the customer's saved draft.
+    const verified = await confirmEmail(token);
+    assert.equal(redirectLocation(verified, "/verify-email").toString(), callback.toString());
+    assert.equal(verified.headers.getSetCookie().length, 0);
+    await assertVerificationState(true, "Only a trusted deliberate POST verifies the account");
     assert.deepEqual(await (await request("/api/account/email-verification", cookie)).json(), { email, verified: true }, "An existing session sees fresh verification state");
-    assert.equal(await db.order.count(), beforeOrders, "Verifying a mailbox never automatically places an order");
-    assert.equal(await db.session.count({ where: { userId: user.id } }), beforeSessions, "Verification does not silently switch or sign in accounts");
-    const replay = await request(verification.pathname + verification.search);
-    assert.ok([302, 303, 307].includes(replay.status));
+    const replayScan = await request(verification.pathname + verification.search);
+    assert.equal(redirectLocation(replayScan, "/verify-email/confirm").toString(), confirmation.toString());
+    const replay = await confirmEmail(token);
+    assert.equal(redirectLocation(replay, "/verify-email").toString(), callback.toString());
     assert.equal(replay.headers.getSetCookie().length, 0);
-    assert.equal(await db.session.count({ where: { userId: user.id } }), beforeSessions);
+    await assertVerificationState(true, "Replaying a link leaves an already verified account unchanged");
+    if (exerciseFailures) {
+      const safeReplay = redirectLocation(await confirmEmail(token, "https://untrusted.example"), "/verify-email");
+      assert.equal(safeReplay.searchParams.get("next"), "/dashboard");
+      assert.equal(safeReplay.searchParams.get("verified"), "1");
+      assert.equal(safeReplay.searchParams.has("token"), false);
+      assert.equal(redirectLocation(await confirmEmail("invalid-verification-token"), "/verify-email").searchParams.get("error"), "INVALID_TOKEN");
+      await assertVerificationState(true, "An invalid later confirmation never revokes existing verification");
+    }
     const alreadyVerified = await request("/api/account/email-verification", cookie, { next });
     assert.equal(alreadyVerified.status, 200);
-    assert.deepEqual(await alreadyVerified.json(), { ok: true, verified: true });
+    assert.deepEqual(await alreadyVerified.json(), { ok: true, email, verified: true });
     const count = await db.$queryRaw<{ count: number }[]>`SELECT COUNT(*)::int AS count FROM "CustomerNotification" WHERE "userId" = ${user.id} AND "kind" = 'VERIFY_EMAIL'`;
     assert.equal(count[0].count, 1, "Cooldown, token replay and verified-state checks do not duplicate emails");
   } finally { await db.$disconnect(); }
@@ -145,6 +242,14 @@ async function main() {
   const sangerOptionsHtml = await sangerOptions.text();
   assert.ok(sangerOptionsHtml.includes("Standard") && sangerOptionsHtml.includes("Pre-mixed"));
   assert.ok(!sangerOptionsHtml.includes("Ready to load"), "The retired submission type is absent from current service choices");
+  for (const service of ["sanger", "nanopore", "molecular"]) {
+    const servicePage = await request(`/services/${service}`);
+    assert.equal(servicePage.status, 200);
+    const serviceHtml = await servicePage.text();
+    assert.ok(!/Sample planner|Download order plan|Online ordering is being finalized|id="(?:sf-order|ob-builder)"/i.test(serviceHtml), "Service pages do not offer the disconnected sample planner");
+    const targetService = service === "nanopore" ? "whole-plasmid" : service === "molecular" ? "oligo" : "sanger";
+    assert.ok(serviceHtml.includes(`/orders/new?service=${targetService}`), "Supported service calls to action link to real ordering");
+  }
   const retiredEntry = await request("/orders/new?service=sanger&type=ready-to-load");
   assert.equal(retiredEntry.status, 307);
   assert.equal(retiredEntry.headers.get("location"), "/orders/new?service=sanger&retired=ready-to-load");
@@ -275,7 +380,7 @@ async function main() {
     body: JSON.stringify(body),
   });
   const oligoResponse = await submitOligo({ ...oligo, pricingSnapshot: { subtotalCents: 1, pendingQuote: false } });
-  assert.equal(oligoResponse.status, 201, "Quote-pending Oligo orders do not require a sequencing rate revision");
+  assert.equal(oligoResponse.status, 201, "Oligo orders do not require an unrelated sequencing rate revision");
   const oligoId = (await oligoResponse.json()).id;
   const oligoRetry = await submitOligo(oligo);
   assert.equal(oligoRetry.status, 201);
@@ -296,8 +401,12 @@ async function main() {
       const html = await response.text();
       assert.ok(html.includes(expected.oligos[0].name) && html.includes(expected.oligoShippingAddress), "Oligo names and outbound delivery survive submission");
       assert.ok(html.includes(expected.oligos[0].sequence.replace(/\s/g, "").toUpperCase()), "The saved normalized sequence is visible");
-      assert.ok(/pending.{0,50}(?:lab|quote|confirmation)|(?:price|quote).{0,50}pending/i.test(html), "Oligo price is explicitly pending confirmation");
-      assert.ok(!html.includes("$0.00") && !html.includes("$0.01"), "Pending quotes are never shown as free or client-supplied prices");
+      if (expected.submissionMode === "Oligo standard") {
+        assert.ok(html.includes("$5.00") && html.includes("$0.25"), "Twenty standard bases cost $5 at $0.25/base in customer, admin and print views");
+      } else {
+        assert.ok(/pending.{0,50}(?:lab|quote|confirmation)|(?:price|quote).{0,50}pending/i.test(html), "Modified Oligo pricing remains explicitly pending confirmation");
+      }
+      assert.ok(!html.includes("$0.00") && !html.includes("$0.01"), "Oligos are never shown as free or priced from a client-supplied snapshot");
       assert.ok(!html.includes("Samples and primers ·") && !html.includes("Sanger sequencing ·"), "Oligo manifests do not invent sequencing samples or reactions");
       if (expected.submissionMode === "Oligo modified") assert.ok(html.includes("Phosphate") && html.includes("Biotin at base 7"));
     }
@@ -320,9 +429,12 @@ async function main() {
     assert.equal(savedOligo.samples.length, 0, "Oligos are separate synthesis items, not placeholder DNA samples");
     assert.deepEqual(savedOligo.oligoSnapshot, { items: [{ ...oligo.oligos[0], sequence: "ACGTACGTACGTACGTACGT" }], shippingAddress: oligo.oligoShippingAddress, format: oligo.oligoFormat, searchNames: oligo.oligos[0].name });
     const savedPrice = savedOligo.pricingSnapshot as { pendingQuote: boolean; subtotalCents: number | null; lines: unknown[] };
-    assert.equal(savedPrice.pendingQuote, true);
-    assert.equal(savedPrice.subtotalCents, null);
-    assert.deepEqual(savedPrice.lines, []);
+    assert.notEqual(savedPrice.pendingQuote, true);
+    assert.equal(savedPrice.subtotalCents, 500);
+    assert.equal(savedPrice.lines.length, 1);
+    const modifiedPrice = (await isolatedDb.order.findUniqueOrThrow({ where: { id: modifiedOligoId } })).pricingSnapshot as { pendingQuote: boolean; subtotalCents: number | null };
+    assert.equal(modifiedPrice.pendingQuote, true);
+    assert.equal(modifiedPrice.subtotalCents, null);
     assert.equal(savedOligo.status, "RECEIVED");
     assert.equal(savedOligo.result, null);
   } finally { await isolatedDb.$disconnect(); }
@@ -349,10 +461,26 @@ async function main() {
   assert.equal((await request(`/api/admin/orders/${id}/status`, customer, { status: "RECEIVED" }, "PATCH")).status, 403);
   assert.equal((await request(`/api/admin/orders/${id}/status`, admin, { status: "RECEIVED" }, "PATCH")).status, 200);
   assert.ok((await (await request(`/orders/${id}`, customer)).text()).includes("Received"));
+  assert.equal((await request(`/api/admin/orders/${id}/status`, admin, { status: "COMPLETED" }, "PATCH")).status, 409, "Completion requires an uploaded result");
   const form = new FormData();
   form.set("file", new File(["Synthetic sequencing result\n"], "synthetic-result.txt", { type: "text/plain" }));
   const upload = await fetch(origin + `/api/admin/orders/${id}/result`, { method: "POST", headers: { cookie: admin, origin }, body: form });
   assert.equal(upload.status, 200);
+  const resultDb = new PrismaClient();
+  let unpublishedResultId = "";
+  try {
+    const saved = await resultDb.order.findUniqueOrThrow({ where: { id }, include: { result: true } });
+    assert.equal(saved.status, "RECEIVED", "Uploading does not publish or complete the order");
+    assert.ok(saved.result);
+    unpublishedResultId = saved.result.id;
+    const notices = await resultDb.$queryRaw<{ count: number }[]>`SELECT COUNT(*)::int AS count FROM "CustomerNotification" WHERE "kind" = 'RESULT_READY'`;
+    assert.equal(notices[0].count, 0, "No result email is queued before the administrator completes the order");
+  } finally { await resultDb.$disconnect(); }
+  assert.ok(!(await (await request(`/orders/${id}`, customer)).text()).includes(`/api/results/${unpublishedResultId}`), "Unpublished results stay out of customer pages");
+  assert.ok([403, 404].includes((await request(`/api/results/${unpublishedResultId}`, customer)).status));
+  assert.equal((await request(`/api/results/${unpublishedResultId}`, admin)).status, 200, "Administrators can inspect uploaded results before publication");
+  const completions = await Promise.all(Array.from({ length: 4 }, () => request(`/api/admin/orders/${id}/status`, admin, { status: "COMPLETED" }, "PATCH")));
+  assert.ok(completions.every(response => response.status === 200), "Concurrent completion requests are idempotent");
   const detail = await (await request(`/orders/${id}`, customer)).text();
   const resultId = detail.match(/href="\/api\/results\/([^"]+)"/)?.[1];
   assert.ok(resultId, "Customer should see the uploaded result");
@@ -362,6 +490,14 @@ async function main() {
   const forbiddenDownload = await request(`/api/results/${resultId}`, otherCustomer);
   assert.equal(forbiddenDownload.status, 403);
   assert.ok(!(await forbiddenDownload.text()).includes("Synthetic sequencing result"));
+  const replacement = new FormData();
+  replacement.set("file", new File(["Corrected synthetic result\n"], "synthetic-corrected.txt", { type: "text/plain" }));
+  assert.equal((await fetch(origin + `/api/admin/orders/${id}/result`, { method: "POST", headers: { cookie: admin, origin }, body: replacement })).status, 409, "A published result cannot be silently overwritten");
+  assert.equal((await request(`/api/admin/orders/${id}/status`, admin, { status: "QC" }, "PATCH")).status, 200);
+  assert.ok([403, 404].includes((await request(`/api/results/${resultId}`, customer)).status), "Moving back to QC withdraws customer access");
+  assert.equal((await fetch(origin + `/api/admin/orders/${id}/result`, { method: "POST", headers: { cookie: admin, origin }, body: replacement })).status, 200);
+  assert.equal((await request(`/api/admin/orders/${id}/status`, admin, { status: "COMPLETED" }, "PATCH")).status, 200);
+  assert.match(await (await request(`/api/results/${resultId}`, customer)).text(), /Corrected synthetic result/);
   const schedule = await (await request("/api/pricing")).json();
   assert.equal(schedule.revision, startingSchedule.revision);
   const update = { ...schedule, rates: { ...schedule.rates, "plasmid-plate": 650 }, reason: "Isolated pricing regression" };
@@ -557,17 +693,28 @@ async function main() {
     }
     assert.equal(customerMessages.filter(item => item.kind === "ORDER_CONFIRMATION").length, ordersWithCustomers.length);
     assert.equal(customerMessages.filter(item => item.kind === "VERIFY_EMAIL").length, 2);
+    const resultMessages = customerMessages.filter(item => item.kind === "RESULT_READY");
+    assert.equal(resultMessages.length, 1, "Concurrent, repeated and reopened completion queues only one result-ready email per order");
+    assert.equal(resultMessages[0].userId, customerId);
+    assert.equal(resultMessages[0].recipient, email, "Result notices go only to the order owner's account email");
+    assert.ok(resultMessages[0].bodyText.includes(`/orders/${id}`));
+    assert.ok(!resultMessages[0].bodyText.includes("Synthetic sequencing result"), "The message links to the private order rather than exposing result content");
     for (const item of customerMessages) {
       assert.equal(item.status, "PREVIEW");
       assert.equal(item.attempts, 0);
       assert.notEqual(item.recipient, "staff@example.test");
     }
   } finally { await mailDb.$disconnect(); }
+  const operationsDb = new PrismaClient();
+  try { await runDropboxAttentionSmoke({ base: origin, db: operationsDb, customerCookie: customer, adminCookie: admin, otherCustomerCookie: otherCustomer }); }
+  finally { await operationsDb.$disconnect(); }
+  await runPasswordResetSmoke();
   console.log("PASS: session-bound verification, unverified submission guard, cooldown, invalid/expired/replayed links, preserved return flow, one customer confirmation per order, and zero real customer sends.");
   console.log("PASS: internal-only registration/order preview notifications, deduplication, and zero real sends.");
   console.log("PASS: customer price permissions, private self-only quotes, scoped overrides, audit, stale-account/revision rejection, immutable snapshots, and reset.");
   console.log("PASS: customer search, saved contacts, scoped history, empty profiles, and admin-only access.");
-  console.log("PASS: Oligo guest entry, validation, Standard/Modified persistence, pending quotes, idempotency, history/filtering, ownership, and production hold.");
+  console.log("PASS: Oligo guest entry, validation, $0.25/base standard pricing, modified quotes, immutable server snapshots, idempotency, ownership, and production hold.");
+  console.log("PASS: explicit result publication, private draft downloads, result-ready email deduplication, replacement guard, and zero real sends.");
   console.log("PASS: submission, immutable prices, price-change confirmation, admin price permissions/history, order search/filters, results, and customer isolation.");
   console.log(`Synthetic order: ${origin}/orders/${id}`);
 }

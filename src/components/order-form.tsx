@@ -22,8 +22,9 @@ import { simpleOrderTemplate } from "@/lib/simple-order-template";
 import { OrderDefaultFields } from "@/components/order-default-fields";
 import { saveOrderDefaults } from "@/components/account-defaults-form";
 import { blankDefaults, type OrderDefaults } from "@/lib/order-defaults";
+import type { DropboxSnapshot } from "@/lib/dropboxes";
 
-export function OrderForm({ userId = null, defaults = blankDefaults(), initialSubmissionMode = "Standard", initialSchedule }: { userId?: string | null; defaults?: OrderDefaults; initialSubmissionMode?: OrderDraft["submissionMode"]; initialSchedule: RateSchedule }) {
+export function OrderForm({ userId = null, defaults = blankDefaults(), initialSubmissionMode = "Standard", initialSchedule, requestedDropbox }: { userId?: string | null; defaults?: OrderDefaults; initialSubmissionMode?: OrderDraft["submissionMode"]; initialSchedule: RateSchedule; requestedDropbox?: DropboxSnapshot }) {
   const router = useRouter();
   const [schedule, setSchedule] = useState(initialSchedule);
   const [priceNotice, setPriceNotice] = useState("");
@@ -48,6 +49,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [pendingImport, setPendingImport] = useState<SampleDraft[] | null>(null);
   const [message, setMessage] = useState("");
+  const [confirmMapSelection, setConfirmMapSelection] = useState(false);
   const alertRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const standard = draft.submissionMode === "Standard";
@@ -56,6 +58,8 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
   const namedSamples = draft.samples.filter(sample => sample.sampleName.trim());
   const count = namedSamples.length;
   const reactions = reactionCount(namedSamples);
+  const mapSelectionDiffers = !!requestedDropbox && (draft.fulfillment.deliveryMethod !== "Dropbox" || draft.fulfillment.dropboxId !== requestedDropbox.id || draft.fulfillment.dropbox?.revision !== requestedDropbox.revision);
+  const needsMapSelectionChoice = confirmMapSelection && mapSelectionDiffers;
 
   const resumeState: OrderResumeState = {
     draft, shareText, entryMethod: entryMethod as OrderResumeState["entryMethod"], bulkText, pendingImport,
@@ -70,6 +74,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     setPriceNotice(changed ? `The prices for this order changed since the draft was saved or you signed in. ${saved.draft.service === "WHOLE_PLASMID" ? "Whole Plasmid prices depend on expected size. " : ""}Review your account's current rates and total before submitting.` : saved.priceNotice || "");
     setSchedule(initialSchedule);
     setDraft(saved.draft); setShareText(saved.shareText); setEntryMethod(oldImport ? saved.imported ? "manual" : "paste" : saved.entryMethod); setBulkText(oldImport && saved.imported ? "" : saved.bulkText);
+    setConfirmMapSelection(!!requestedDropbox);
     setPendingImport(oldImport && saved.imported ? null : saved.pendingImport); setSubmissionKey(saved.submissionKey);
     setStep(saved.review ? "details" : saved.step); setMappingSheet(saved.mappingSheet); setPasteSource(saved.pasteSource);
     const checked = orderSchema.safeParse(saved.draft);
@@ -79,9 +84,24 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
   function signInToContinue(key = submissionKey) {
     if (resume.save({ ...resumeState, submissionKey: key })) window.location.assign(orderLoginUrl(initialSubmissionMode));
   }
-  const draftNotice = <><p className="rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">{!userId && <>You can prepare this order as a guest. Sign in or create an account at the final step. </>}{resume.storageError ? "Draft saving is unavailable." : "Drafts are saved automatically in this browser for 30 days after your latest edit. You can close this page and return to this submission type to continue."}</p>{resume.storageError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{resume.storageError}</p>}</>;
+  function useRequestedDropbox() {
+    if (!requestedDropbox || submitting.current) return;
+    setDraft(current => ({ ...current, fulfillment: { ...current.fulfillment, deliveryMethod: "Dropbox", dropboxId: requestedDropbox.id, dropbox: requestedDropbox } }));
+    setConfirmMapSelection(false);
+    setSubmissionKey("");
+    setReview(null);
+    if (review) setStep("details");
+    setErrors([]); setFieldIssues({});
+    // Keep any price-change warning and pending spreadsheet work when changing delivery.
+    setMessage(`Dropbox selected: ${requestedDropbox.name}. Review delivery details before submitting.`);
+  }
+  const draftNotice = <><p className="rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">{!userId && <>You can prepare this order as a guest. Sign in or create an account at the final step. </>}{resume.storageError ? "Draft saving is unavailable." : "Drafts are saved automatically in this browser for 30 days after your latest edit. You can close this page and return to this submission type to continue."}</p>{resume.storageError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{resume.storageError}</p>}{needsMapSelectionChoice && requestedDropbox && <section aria-label="Choose delivery for your restored draft" className="space-y-3 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"><p className="font-bold">Use the dropbox you selected on the map?</p><p>You selected <strong>{requestedDropbox.name}</strong>. Your restored draft has a different delivery choice. Choose which one to use for this order.</p><p className="text-teal-800">{requestedDropbox.address}</p><div className="flex flex-wrap gap-3"><button type="button" className="button-primary" disabled={loading} onClick={useRequestedDropbox}>Use {requestedDropbox.name} for this draft</button><button type="button" className="button-secondary" disabled={loading} onClick={() => setConfirmMapSelection(false)}>Keep my draft’s delivery choice</button></div></section>}</>;
 
   function update<K extends keyof OrderDraft>(field: K, value: OrderDraft[K]) {
+    if (field === "fulfillment") {
+      const next = value as OrderDefaults;
+      if (next.deliveryMethod !== draft.fulfillment.deliveryMethod || next.dropboxId !== draft.fulfillment.dropboxId || next.dropbox?.revision !== draft.fulfillment.dropbox?.revision) setConfirmMapSelection(false);
+    }
     importRevision.current++;
     setSubmissionKey("");
     setDraft(current => ({ ...current, [field]: value }));
@@ -111,7 +131,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function submitOrder() {
-    if (!review || submitting.current || priceNotice || accountChanged) return;
+    if (!review || submitting.current || priceNotice || accountChanged || needsMapSelectionChoice) return;
     if (!userId) { signInToContinue(); return; }
     submitting.current = true; const key = submissionKey || crypto.randomUUID(); setSubmissionKey(key); setLoading(true); setErrors([]);
     try {
@@ -132,6 +152,11 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
         const before = priceOrder(review, schedule); const after = priceOrder(review, latest);
         setSchedule(latest);
         setPriceNotice(`The price schedule was updated. Your sequencing total was ${formatMoney(before.subtotalCents)} and is now ${formatMoney(after.subtotalCents)}. Review and confirm the current price before submitting. No order has been created.`);
+        return;
+      }
+      if (response.status === 409 && payload.code === "DROPBOX_CHANGED") {
+        setReview(null); setStep("details"); setSubmissionKey("");
+        showErrors([payload.error || "Review your dropbox selection before submitting."]);
         return;
       }
       if (!response.ok) { showErrors(Array.isArray(payload.issues) ? payload.issues : [payload.error || "Unable to submit the order."]); return; }
@@ -188,7 +213,7 @@ export function OrderForm({ userId = null, defaults = blankDefaults(), initialSu
     <p className="text-sm text-slate-600">{wholePlasmid ? "Check your plasmid names, physical labels and sample count." : "Check your physical labels, sample count and reaction count."} The order is saved only when you confirm below.</p>
     <OrderManifest order={{ ...review, fulfillmentSnapshot: { ...review.fulfillment, sharedResultEmails: review.sharedResultEmails }, pricingSnapshot: priceOrder(review, schedule) }} />
     {priceNotice && <div role="alert" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950"><p className="font-bold">Please confirm the updated price</p><p>{priceNotice}</p><label className="flex items-center gap-3"><input type="checkbox" checked={false} onChange={() => setPriceNotice("")} />I have reviewed and accept the updated sequencing price.</label></div>}
-    {errorPanel}{accountChanged && <button type="button" className="button-secondary" onClick={() => window.location.reload()}>Reload for current account</button>}<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }} className="button-secondary">Back to edit samples</button><button type="button" disabled={loading} onClick={() => { setReview(null); setErrors([]); }} className="button-secondary">Edit delivery & billing</button><button type="button" disabled={loading || !!priceNotice || accountChanged} onClick={submitOrder} className="button-primary">{loading && <LoaderCircle className="h-4 w-4 animate-spin" />}{userId ? "Confirm and submit order" : "Sign in to submit order"}</button></div>
+    {errorPanel}{accountChanged && <button type="button" className="button-secondary" onClick={() => window.location.reload()}>Reload for current account</button>}<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }} className="button-secondary">Back to edit samples</button><button type="button" disabled={loading} onClick={() => { setReview(null); setErrors([]); }} className="button-secondary">Edit delivery & billing</button><button type="button" disabled={loading || !!priceNotice || accountChanged || needsMapSelectionChoice} onClick={submitOrder} className="button-primary">{loading && <LoaderCircle className="h-4 w-4 animate-spin" />}{userId ? "Confirm and submit order" : "Sign in to submit order"}</button></div>
   </div>;
 
   return <form method="post" noValidate onSubmit={reviewOrder} className="sanger-order-form space-y-6">

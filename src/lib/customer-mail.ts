@@ -22,7 +22,9 @@ export function getCustomerMailConfig(env: Partial<NodeJS.ProcessEnv> = process.
   const from = address(env.CUSTOMER_MAIL_FROM || env.INTERNAL_MAIL_FROM || "");
   if (mode === "preview") return { mode, from };
   const policy = (env.CUSTOMER_MAIL_ALLOWED_RECIPIENTS || "").trim();
-  const allowAll = policy === "*" && env.NODE_ENV === "production";
+  // An explicit wildcard enables customer delivery in local demos or production.
+  // The shared SMTP guard still blocks all real mail in automated tests.
+  const allowAll = policy === "*";
   if (!policy || (policy.includes("*") && !allowAll)) throw new CustomerMailError("MAIL_CONFIG_INVALID");
   const allowedRecipients = allowAll ? [] : [...new Set(policy.split(",").map(address))];
   const config = getInternalMailConfig({ ...env, INTERNAL_MAIL_MODE: "smtp", INTERNAL_MAIL_TO: from, INTERNAL_MAIL_FROM: from });

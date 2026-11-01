@@ -1,6 +1,6 @@
 # Design handoff: email verification page
 
-Updated October 22, 2026. **This page's visual design needs revision. The current implementation is a functional placeholder, not an approved final design.**
+Updated November 1, 2026. **Email-verification visual review remains a design task.** The current connection/animation treatment is implemented; confirm the final appearance with the owner while preserving the working verification flow.
 
 中文交接：优先修改「邮箱验证」页面。希望有正式、可信的科研服务网站感觉，可以保留一点品牌亲和力和很克制的海豹元素。之前的大海豹、星星、气泡、漂浮信封和俏皮文案太卡通；后来的白底深蓝版本仍待设计伙伴重新调整。验证、返回原订单和草稿保存逻辑已经接好，请保留。
 
@@ -8,24 +8,30 @@ Updated October 22, 2026. **This page's visual design needs revision. The curren
 
 Local page: [`http://localhost:3000/verify-email`](http://localhost:3000/verify-email).
 
+Live test site: [seqforgebio.com](https://seqforgebio.com). Read the [Chinese owner/designer handoff](deploy/aws/HANDOFF_ZH.md) for AWS, GoDaddy and release responsibilities. GitHub push currently does **not** update the live site automatically. Design work should be reviewed locally with email preview and then released deliberately; the live site sends real account mail.
+
 Order-return example: [`/verify-email?next=%2Forders%2Fnew%3Fservice%3Dsanger%26type%3Dstandard`](http://localhost:3000/verify-email?next=%2Forders%2Fnew%3Fservice%3Dsanger%26type%3Dstandard).
 
 | File | Design responsibility |
 | --- | --- |
-| [`src/components/email-verification.tsx`](src/components/email-verification.tsx) | Primary page composition, headings, instructions, buttons, status messages, decorative trace SVG and small seal. Presentation starts at `const title` and the returned `<main>`; the preceding functions/effects implement the working flow. |
-| [`src/components/email-verification.module.css`](src/components/email-verification.module.css) | Scoped layout, type, colors, spacing, responsive rules, focus states and motion. `.content` is the main action area; `.guide` is the secondary instructions panel; `.trace` and `.supportNote` are the current science/seal accents. |
+| [`src/components/email-verification.tsx`](src/components/email-verification.tsx) | Primary composition, account email, actions and status messages. The sidebar mounts the `seqforge-connection` custom element and passes its current state; keep the preceding account/network effects intact. |
+| [`src/components/email-verification.module.css`](src/components/email-verification.module.css) | Scoped layout, type, colors, spacing, responsive/focus states and motion. `.content` is the action area and `.guide` contains the connection artwork. Some older decorative rules remain; inspect actual rendered markup before changing them. |
+| [`public/brand/verification-connection.js`](public/brand/verification-connection.js) | Current connection/sidebar animation, shadow-DOM styling, interactive seal treatment, sound controls and verified-state presentation. Keep the `state` interface and reduced-motion/fallback behavior working. |
+| [`src/components/email-confirmation.tsx`](src/components/email-confirmation.tsx) | Email-link confirmation screen and its explicit confirmation action; visual changes must preserve the scanner-safe POST flow. |
 | [`src/app/verify-email/page.tsx`](src/app/verify-email/page.tsx) | Server route, metadata, current signed-in account and real database verification state. Keep this behavior when restyling. |
 | [`src/components/brand.tsx`](src/components/brand.tsx) | Shared SeqForge logo component. Changes affect other pages. |
 | [`src/app/globals.css`](src/app/globals.css) | Shared website styles. Prefer the scoped verification stylesheet for this task to avoid changing ordering/admin screens accidentally. |
 | [`src/components/auth-form.tsx`](src/components/auth-form.tsx) | Registration sends customers to verification; login/register preserve the order-return path. Related behavior, not the main redesign target. |
 
-Existing assets: [`public/brand/assets/logo.webp`](public/brand/assets/logo.webp), [`public/brand/assets/seal-report.png`](public/brand/assets/seal-report.png), and [`public/brand/assets/seal-transparent.png`](public/brand/assets/seal-transparent.png). The current page uses `seal-report.png` as a small support accent. The seal can remain subtle or be omitted if the new composition works better without it.
+Existing assets include [`logo.webp`](public/brand/assets/logo.webp), [`seal-report.png`](public/brand/assets/seal-report.png), [`seal-transparent.png`](public/brand/assets/seal-transparent.png), and the verified-state [`email-success.riv`](public/brand/assets/email-success.riv). The current sidebar uses the connection custom element and locally bundled Rive runtime, rather than the older static seal-panel description. The seal can remain subtle or be omitted if the composition works better without it.
+
+Public marketing pages live under `public/brand/`, while live account/order/admin behavior lives under `src/app/` and `src/components/`. See [frontend integration](FRONTEND_INTEGRATION.md) before changing routes or shared styles. Homepage/service price displays must continue to use the application pricing rules rather than newly hardcoded design values.
 
 ## Visual direction
 
 - Put the verification task, account email and primary action first. Use a clear information hierarchy and direct English copy.
 - Aim for a professional scientific service: restrained navy/teal, readable typography, deliberate spacing, and a coherent relationship to the rest of SeqForge.
-- Scientific line work is optional decoration; the current trace SVG is illustrative, not real sample data or a required design element.
+- Scientific line work and connection animation are illustrative, not real sample data or required design elements.
 - Avoid a mascot-led hero, confetti, stars, bubbles, continuous bobbing, and phrases such as “seal mail.” Small purposeful transitions are welcome.
 - Reconsider the overall composition freely. The present two-column card, sidebar, curves and seal placement are provisional.
 
@@ -48,6 +54,7 @@ Keep visible keyboard focus, semantic buttons/links, live status announcements, 
 - The page uses `GET` and `POST /api/account/email-verification`. The server chooses the current account's email; the browser must not supply an arbitrary recipient.
 - Sending is acknowledged only after the API reports it; preview is not delivery. The resend cooldown is 60 seconds, and verification links last one hour.
 - A `verified=1` URL parameter is not proof of verification. Keep the real database/status checks, email-match checks and restricted `next` destination helpers.
+- Email links first open the passive confirmation page in `src/app/verify-email/confirm/page.tsx` and `src/components/email-confirmation.tsx`, sharing the verification stylesheet. Keep its explicit **Confirm my email** POST; never submit automatically on mount or verify during GET/HEAD, since email scanners may follow links before delivery.
 - Verification does not automatically submit an order or switch the signed-in account. Returning to an order restores the existing continue/reset and review flow.
 - Keep authentication, order API enforcement, recipient restrictions and notification queues intact during visual changes. Relevant logic lives in `src/lib/auth.ts`, `src/lib/order-resume.ts`, `src/lib/verification-return.ts`, `src/lib/customer-mail.ts`, `src/lib/customer-notifications.ts` and `src/app/api/`.
 
@@ -57,7 +64,7 @@ Follow [`PC_HANDOFF_ZH.md`](PC_HANDOFF_ZH.md) for a fresh computer and [`README.
 
 GitHub contains source and migrations, not local credentials, customer data, result uploads, browser drafts or login sessions. Do not copy production data merely to review a design.
 
-Customer mail is off by default. See [`EMAIL_NOTIFICATIONS.md`](EMAIL_NOTIFICATIONS.md) for local preview or explicitly allowlisted SMTP testing. A signed-in, unverified visit to this page automatically requests a verification message; use preview mode for visual work. The local demo address cannot receive email. Do not disable verification or mark real accounts verified to bypass testing.
+Customer mail is off by default. See [`EMAIL_NOTIFICATIONS.md`](EMAIL_NOTIFICATIONS.md) for local preview or SMTP testing with a recipient list or explicit `*` to allow all customer addresses. A signed-in, unverified visit to this page automatically requests a verification message; use preview mode for visual work. The local demo address cannot receive email. Do not disable verification or mark real accounts verified to bypass testing.
 
 **Do not submit synthetic orders to the working app on `localhost:3000` or its working database.** Run `npm run test:smoke` for submission/verification checks; it creates a disposable app, PostgreSQL schema and result storage, forces email preview mode and cleans up afterwards. Use that isolated setup for manual synthetic submissions too; do not bypass the direct-script guard.
 
@@ -68,7 +75,9 @@ For presentation-only edits, run scoped ESLint and TypeScript checks and inspect
 - Sanger Standard/Pre-mixed, Whole Plasmid and independent Oligo ordering, with manual entry and mapped spreadsheet paste/CSV upload. Ready to load is retired.
 - Persistent drafts, login handoff, order review and deduplicated submission.
 - Global and customer-specific sequencing rates, saved historical order prices, admin search/filtering, customer profiles and order history.
-- Oligo specifications and shipping details; price remains pending a laboratory quote. A full quote/approval workflow is still future work.
-- Separate staff alerts, customer verification and order-confirmation queues; restricted local SMTP testing. Password recovery and result-availability emails remain future work.
+- Standard Oligo at 25 nmol/Desalted/no modification is $0.25/base; other specifications need a separate quote. Specifications/shipping are captured, but the full quote/approval/production workflow is still future work.
+- Dropboxes default for Sanger/Whole Plasmid, with public map/list and admin location management; exact box placement and pickup schedules remain to be confirmed.
+- Password recovery, customer verification/order/hold/result notifications and staff registration/order alerts are implemented. Results are released after an uploaded file is checked and the order is explicitly completed. Actual customer email/result acceptance and reliable unattended customer-mail retry handling still require work.
+- Needs-attention holds, private result handling, administrator pricing/customer management and immutable historical order snapshots are implemented. There is no online card payment or LIMS/instrument integration.
 
-This repository handoff is **not a production deployment**. Hosting, public HTTPS domain configuration, company-owned production mail and operational setup remain separate launch work. Existing company mail, DNS and the old website have not been changed by this design work.
+The AWS test deployment is live with HTTPS, managed PostgreSQL and private persistent result storage. A real owner-designated account has verified its email and been provisioned as administrator; cloud accounts and data are independent of local development. Read the [dated deployment evidence and remaining checks](deploy/aws/README.md) before claiming full production acceptance. Design commits do not deploy themselves, and this handoff does not authorize changes to the old seqforge.com site, company email or their DNS records.

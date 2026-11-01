@@ -14,7 +14,7 @@ export async function GET(request: Request, context: RouteContext<"/api/results/
   const { id } = await context.params;
   const result = await prisma.result.findUnique({
     where: { id },
-    include: { order: { select: { userId: true } } },
+    include: { order: { select: { userId: true, status: true } } },
   });
 
   if (!result) {
@@ -22,6 +22,9 @@ export async function GET(request: Request, context: RouteContext<"/api/results/
   }
   if (session.user.role !== "admin" && result.order.userId !== session.user.id) {
     return Response.json({ error: "You do not have access to this result." }, { status: 403 });
+  }
+  if (session.user.role !== "admin" && result.order.status !== "COMPLETED") {
+    return Response.json({ error: "This result has not been released yet." }, { status: 403, headers: { "Cache-Control": "private, no-store" } });
   }
 
   try {

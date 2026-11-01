@@ -1,0 +1,70 @@
+name: seqforge-test
+
+x-logging: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  app:
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/aws/Dockerfile
+    env_file:
+      - path: /etc/seqforge/seqforgebio.env
+        required: true
+        format: raw
+    environment:
+      NODE_ENV: production
+      BETTER_AUTH_URL: https://seqforgebio.com
+      RESULT_STORAGE_PATH: /var/lib/seqforge/results
+      SHOW_DEMO_ACCOUNTS: "false"
+    volumes:
+      - type: bind
+        source: /srv/seqforge/seqforgebio/results
+        target: /var/lib/seqforge/results
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /etc/seqforge/rds-ca.pem
+        target: /etc/seqforge/rds-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      start_period: 60s
+      retries: 3
+    stop_grace_period: 30s
+    logging: *bounded-logs
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logs
+
+volumes:
+  caddy_data:
+  caddy_config:

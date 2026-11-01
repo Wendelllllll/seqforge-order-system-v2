@@ -45,7 +45,8 @@ model Session {
 
 model Account {
   id                    String    @id
-  issuer                String
+  // Retain legacy values; Better Auth >=1.7.3 keys accounts by providerId.
+  issuer                String?
   accountId             String
   providerId            String
   userId                String
@@ -61,7 +62,7 @@ model Account {
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@unique([issuer, accountId])
+  @@unique([providerId, accountId])
 }
 
 model Verification {
@@ -94,6 +95,9 @@ model Order {
   poNumber            String?
   specialInstructions String?
   status              String          @default("SUBMITTED")
+  statusRevision      Int             @default(0)
+  holdReason          String?
+  holdPreviousStatus  String?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   completedAt         DateTime?
@@ -212,10 +216,34 @@ model StatusHistory {
   id        String   @id @default(cuid())
   orderId   String
   status    String
+  note      String?
+  previousStatus String?
+  actorId   String?
+  actorName String?
+  requestKey String?
+  requestHash String?
   createdAt DateTime @default(now())
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+  @@unique([orderId, requestKey])
+}
+
+model DropboxLocation {
+  id                    String   @id
+  name                  String
+  address               String
+  placementInstructions String
+  pickupSchedule        String
+  accessNotes           String
+  latitude              Float?
+  longitude             Float?
+  active                Boolean  @default(false)
+  revision              Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([active, name])
 }
 
 // Internal staff notifications only. Preview records are never promoted to live mail.

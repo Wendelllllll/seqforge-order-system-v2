@@ -2,11 +2,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { customerPriceUpdateSchema } from "@/lib/customer-pricing";
 import { CustomerNotFound, CustomerPriceChanged, updateCustomerPricing } from "@/lib/customer-pricing-store";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session || session.user.role !== "admin") return Response.json({ error: "Administrator access required." }, { status: 403 });
-  if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!hasTrustedRequestOrigin(request)) return Response.json({ error: "Invalid request origin." }, { status: 403 });
   let input: unknown;
   try {
     const text = await request.text();
