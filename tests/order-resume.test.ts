@@ -1,12 +1,67 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blankOrder } from "../src/lib/order-intake";
+import { addOnIdsSchema, blankOrder, MAX_SANGER_REACTIONS, MAX_SANGER_SAMPLES, reactionCount } from "../src/lib/order-intake";
 import { DEFAULT_SCHEDULE } from "../src/lib/rate-schedule";
 import { blankOligo } from "../src/lib/oligo-entry";
-import { emailVerificationUrl, safeAuthReturn, hasOrderDraftChanges, ORDER_DRAFT_TTL, orderDraftKey, persistentOrderDraftKey, persistOrderDraft, restoreOrderDraft, orderLoginUrl, readSavedOrder, safeOrderReturn } from "../src/lib/order-resume";
+import { emailVerificationUrl, safeAuthReturn, hasOrderDraftChanges, MAX_SAVED_DRAFT_CHARS, ORDER_DRAFT_TTL, orderDraftKey, persistentOrderDraftKey, persistOrderDraft, restoreOrderDraft, orderLoginUrl, readSavedOrder, safeOrderReturn } from "../src/lib/order-resume";
 
 const now = 1_800_000_000_000;
 const saved = (extra = {}) => JSON.stringify({ version: 1, savedAt: now, ownerId: null, draft: blankOrder(), ...extra });
+
+test("large Sanger drafts retain eight plates, two primers, mapped import and retry identity through login", () => {
+  const disk = memoryStorage(); const tab = memoryStorage();
+  const draft = blankOrder(); draft.container = "Plate";
+  draft.samples = Array.from({ length: 768 }, (_, i) => ({ ...draft.samples[0], sampleKey: `S${i + 1}`, sampleName: `DNA-${i + 1}`, plateLabel: `Plate-${Math.floor(i / 96) + 1}`, well: `${"ABCDEFGH"[i % 8]}${Math.floor((i % 96) / 8) + 1}`, addOnIds: ["pcr-cleanup"], reactions: ["Forward", "Reverse"].map(primerName => ({ ...draft.samples[0].reactions[0], primerName, addOnIds: ["gc-rich"] })) }));
+  const mappingSheet = { hasHeader: true, columns: ["sampleName"], rows: Array.from({ length: 1537 }, (_, i) => ({ cells: [i ? `DNA-${i}` : "Sample name"], line: i + 1 })) };
+  const state = readSavedOrder(saved({ draft, mappingSheet, bulkText: "Sample name\nPending", pendingImport: draft.samples, entryMethod: "paste", review: true, step: "details", pricingSchedule: DEFAULT_SCHEDULE, priceNotice: "Review changed prices", submissionKey: "123e4567-e89b-42d3-a456-426614174000" }), "Standard", null, now)!;
+  assert.ok(state);
+  const raw = persistOrderDraft(disk, "Standard", null, state, now); tab.setItem(orderDraftKey("Standard"), raw);
+  const restored = restoreOrderDraft(disk, tab, "Standard", "customer-1", now)!;
+  assert.deepEqual(restored.draft, draft); assert.equal(reactionCount(restored.draft.samples), 1536);
+  assert.deepEqual(restored.mappingSheet, mappingSheet); assert.equal(restored.pendingImport?.length, 768);
+  assert.equal(restored.submissionKey, state.submissionKey); assert.equal(restored.priceNotice, state.priceNotice);
+  assert.equal(restoreOrderDraft(disk, memoryStorage(), "Standard", "customer-2", now), null);
+});
+
+test("draft limits separate Sanger physical samples, reactions and import rows from other services", () => {
+  const draft = blankOrder();
+  draft.samples = Array.from({ length: MAX_SANGER_SAMPLES }, (_, i) => ({ ...draft.samples[0], sampleKey: `S${i + 1}`, reactions: [draft.samples[0].reactions[0], draft.samples[0].reactions[0]] }));
+  const mappingSheet = { hasHeader: true, columns: [], rows: Array.from({ length: MAX_SANGER_REACTIONS + 1 }, (_, i) => ({ cells: ["x"], line: i + 1 })) };
+  assert.ok(readSavedOrder(saved({ draft, mappingSheet }), "Standard", null, now));
+  assert.equal(readSavedOrder(saved({ draft, mappingSheet: { ...mappingSheet, rows: [...mappingSheet.rows, { cells: ["x"], line: 3074 }] } }), "Standard", null, now), null);
+  assert.equal(readSavedOrder(saved({ draft: { ...draft, samples: [...draft.samples, draft.samples[0]] } }), "Standard", null, now), null);
+  const plasmid = { ...draft, service: "WHOLE_PLASMID", submissionMode: "Whole plasmid", samples: draft.samples.slice(0, 251).map(sample => ({ ...sample, reactions: [] })) };
+  assert.equal(readSavedOrder(saved({ draft: plasmid }), "Whole plasmid", null, now), null);
+  const oligo = { ...blankOrder(), service: "OLIGO", submissionMode: "Oligo standard", samples: [], oligos: Array.from({ length: 251 }, () => blankOligo()) };
+  assert.equal(readSavedOrder(saved({ draft: oligo }), "Oligo standard", null, now), null);
+});
+
+test("oversized or quota-failed draft saves never silently replace a restorable saved draft", () => {
+  const disk = memoryStorage(); const state = readSavedOrder(saved(), "Standard", null, now)!;
+  const original = persistOrderDraft(disk, "Standard", null, state, now);
+  assert.throws(() => persistOrderDraft(disk, "Standard", null, { ...state, bulkText: "x".repeat(MAX_SAVED_DRAFT_CHARS) }, now), /too large/);
+  assert.equal(disk.getItem(persistentOrderDraftKey("Standard", null)), original);
+  assert.throws(() => persistOrderDraft({ ...disk, setItem: () => { throw new Error("Quota exceeded"); } }, "Standard", null, state, now), /Quota exceeded/);
+  assert.throws(() => persistOrderDraft({ ...disk, setItem: () => {}, getItem: () => "old value" }, "Standard", null, state, now), /Draft not saved/);
+});
+
+test("Additional services retain order, sample and reaction selections through saved-draft login", () => {
+  const disk = memoryStorage();
+  const tab = memoryStorage();
+  const draft = blankOrder();
+  draft.addOnIds = ["handling"];
+  draft.samples[0].addOnIds = ["pcr-cleanup"];
+  draft.samples[0].reactions[0].addOnIds = ["gc-rich", "polya"];
+  tab.setItem(orderDraftKey("Standard"), saved({ draft, pricingSchedule: DEFAULT_SCHEDULE, priceNotice: "Review changed extras" }));
+  const restored = restoreOrderDraft(disk, tab, "Standard", "customer-1", now)!;
+  assert.deepEqual(restored.draft.addOnIds, ["handling"]);
+  assert.deepEqual(restored.draft.samples[0].addOnIds, ["pcr-cleanup"]);
+  assert.deepEqual(restored.draft.samples[0].reactions[0].addOnIds, ["gc-rich", "polya"]);
+  assert.deepEqual(restoreOrderDraft(disk, memoryStorage(), "Standard", "customer-1", now + 1000)?.draft, restored.draft);
+  assert.equal(restored.priceNotice, "Review changed extras");
+  assert.equal(addOnIdsSchema.safeParse(["gc-rich", "gc-rich"]).success, false);
+  assert.equal(addOnIdsSchema.safeParse(["invalid/id"]).success, false);
+});
 
 test("Oligo drafts preserve unfinished sequences, imports and outbound delivery across sign-in", () => {
   const disk = memoryStorage();

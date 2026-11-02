@@ -1,21 +1,45 @@
 import { IMPORT_COLUMNS, readDelimited } from "./order-import";
-import { MAX_IMPORT_BYTES, MAX_REACTIONS, type OrderDraft, type SampleDraft } from "./order-intake";
-import { parseSangerPaste, sangerColumnAliases } from "./sanger-entry";
+import { importRowLimit, MAX_IMPORT_BYTES, type OrderDraft, type SampleDraft } from "./order-intake";
+import { parseSangerPaste, sangerColumnAliases, type PrimerCommaMode } from "./sanger-entry";
 
 export const MAPPING_FIELDS = [
   ["", "Ignore this column"], ["sampleName", "Sample name *"], ["tubeLabel", "Tube label"],
   ["plateLabel", "Plate label"], ["well", "Well position"], ["templateType", "DNA type"],
   ["templateLength", "DNA length (bp)"], ["concentration", "DNA concentration (ng/µL)"],
   ["primerName", "Primer name(s)"], ["primerSource", "Primer source"],
-  ["customerPrimer", "Customer primer names (old template)"], ["universalPrimer", "SeqForge primer names (old template)"],
+  ["customerPrimer", "Customer-supplied primer names"], ["universalPrimer", "SeqForge stock primer names"],
   ["primerConcentration", "Primer concentration (pmol/µL)"], ["preparation", "Preparation"],
   ["specialProtocol", "Special protocol"], ["notes", "Sample notes"], ["sampleKey", "Sample ID"],
   ["storedPrimerReference", "Stored primer reference"], ["primerSequence", "Primer sequence"],
   ["purification", "Primer purification"], ["synthesisScale", "Synthesis scale"],
   ["modification5", "5′ modification"], ["modification3", "3′ modification"], ["modificationInternal", "Internal modification"],
 ] as const;
-export type MappingSource = "" | "Customer supplied" | "SeqForge universal primer" | "column" | "primer-columns" | "Included in mix";
-export type MappingSheet = { rows: ReturnType<typeof readDelimited>; hasHeader: boolean; columns: string[] };
+export type MappingSource = "" | "Customer supplied" | "SeqForge universal primer" | "Stored at SeqForge" | "column" | "primer-columns" | "Included in mix";
+const SYNTHESIS_FIELDS = new Set(["primerSequence", "purification", "synthesisScale", "modification5", "modification3", "modificationInternal"]);
+const ADDITIONAL_FIELDS = new Set(["sampleKey", "preparation", "specialProtocol", "primerSource", "customerPrimer", "universalPrimer"]);
+type MappingContext = { container: OrderDraft["container"]; standard: boolean; source: MappingSource };
+
+/** Keep recognized but incompatible columns visible until the customer explicitly ignores or remaps them. */
+export function sangerMappingFieldAllowed(field: string, { container, standard }: MappingContext) {
+  if (SYNTHESIS_FIELDS.has(field)) return false;
+  if (container === "Tubes" ? ["plateLabel", "well"].includes(field) : field === "tubeLabel") return false;
+  if (!standard && ["primerSource", "primerConcentration", "storedPrimerReference", "customerPrimer", "universalPrimer", "preparation"].includes(field)) return false;
+  return true;
+}
+
+export function sangerMappingOptions(context: MappingContext, additional = false, current = "") {
+  return MAPPING_FIELDS.filter(([field]) => field === current || (
+    sangerMappingFieldAllowed(field, context) &&
+    (additional || !ADDITIONAL_FIELDS.has(field)) &&
+    (field !== "primerConcentration" || !["SeqForge universal primer", "Stored at SeqForge"].includes(context.source)) &&
+    (field !== "storedPrimerReference" || context.source === "Stored at SeqForge" || context.source === "column")
+  ));
+}
+export type MappingSheet = { rows: ReturnType<typeof readDelimited>; hasHeader: boolean; columns: string[]; primerCommaMode?: PrimerCommaMode };
+export function hasPrimerCommas(sheet: MappingSheet) {
+  const indices = sheet.columns.flatMap((field, index) => ["primerName", "customerPrimer", "universalPrimer"].includes(field) ? [index] : []);
+  return sheet.rows.slice(sheet.hasHeader ? 1 : 0).some(row => indices.some(index => row.cells[index]?.includes(",")));
+}
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function suggestMapping(rows: MappingSheet["rows"], hasHeader: boolean, container: OrderDraft["container"]) {
@@ -33,11 +57,11 @@ export function suggestMapping(rows: MappingSheet["rows"], hasHeader: boolean, c
   });
 }
 
-export function inspectSangerSheet(text: string, container: OrderDraft["container"]): MappingSheet {
+export function inspectSangerSheet(text: string, container: OrderDraft["container"], service: OrderDraft["service"] = "SANGER"): MappingSheet {
   if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES) throw new Error("The import is larger than 1 MB.");
   const rows = readDelimited(text);
   if (!rows.length) throw new Error("Paste or upload at least one sample row.");
-  if (rows.length > MAX_REACTIONS + 1) throw new Error(`Import at most ${MAX_REACTIONS} data rows.`);
+  if (rows.length > importRowLimit(service) + 1) throw new Error(`Import at most ${importRowLimit(service)} data rows.`);
   if (rows.some(row => row.cells.length > 100)) throw new Error("Import at most 100 columns. Remove unused columns first.");
   const hasHeader = rows[0].cells.some(cell => sangerColumnAliases[normalize(cell)] === "sampleName") || rows[0].cells[0] === "#";
   return { rows, hasHeader, columns: suggestMapping(rows, hasHeader, container) };
@@ -51,14 +75,16 @@ export function parseMappedSanger(sheet: MappingSheet, order: Omit<OrderDraft, "
   if (new Set(fields).size !== fields.length) return fail("Each destination field can be mapped only once. Ignore duplicate columns or choose another field.");
   if (fields.some(field => !MAPPING_FIELDS.some(([value]) => value === field))) return fail("Choose supported destination fields.");
   const data = sheet.rows.slice(sheet.hasHeader ? 1 : 0);
-  if (!data.length || data.length > MAX_REACTIONS) return fail(`Import between 1 and ${MAX_REACTIONS} data rows.`);
+  if (!data.length || data.length > importRowLimit(order.service)) return fail(`Import between 1 and ${importRowLimit(order.service)} data rows.`);
   const standard = order.submissionMode === "Standard";
+  const incompatible = fields.filter(field => !sangerMappingFieldAllowed(field, { container: order.container, standard, source }));
+  if (incompatible.length) return fail(`These columns do not apply to this submission: ${incompatible.map(field => MAPPING_FIELDS.find(([value]) => value === field)?.[1] || field).join(", ")}. Explicitly ignore or remap them before importing.`);
   if (!source || (!standard && source !== "Included in mix")) return fail(standard ? "Explicitly choose where the primers come from." : "Confirm that DNA and one primer are already mixed in each tube or well.");
   const splitPrimers = fields.includes("customerPrimer") || fields.includes("universalPrimer");
-  if (splitPrimers && fields.includes("primerName")) return fail("Map either Primer name(s) or the old template primer columns, not both.");
+  if (splitPrimers && fields.includes("primerName")) return fail("Use either one Primer name(s) column or separate customer / SeqForge primer columns. Ignore the columns you do not need.");
   if (standard && source === "column" && !fields.includes("primerSource")) return fail("Map your source column to Primer source.");
-  if (standard && source === "primer-columns" && !splitPrimers) return fail("Map the old template customer / SeqForge primer columns.");
-  if (standard && splitPrimers && source !== "primer-columns") return fail("Choose the old template primer-column source option, or map one primer column to Primer name(s) and ignore the other.");
+  if (standard && source === "primer-columns" && !splitPrimers) return fail("Your columns have changed. Choose where the primers come from again.");
+  if (standard && splitPrimers && source !== "primer-columns") return fail("Confirm the primer sources shown in your separate customer / SeqForge columns, or map one column to Primer name(s) and ignore the other.");
   if (standard && fields.includes("primerSource") && source !== "column") return fail("Choose Use the Primer source column, or explicitly ignore that column to use one source for all rows.");
   if (standard && !fields.includes("primerName") && !splitPrimers) return fail("Map a column to Primer name(s).");
   const output: Record<string, string>[] = [];
@@ -87,5 +113,5 @@ export function parseMappedSanger(sheet: MappingSheet, order: Omit<OrderDraft, "
   const columns = IMPORT_COLUMNS.filter(field => output.some(row => field in row));
   const csv = [columns, ...output.map(row => columns.map(column => row[column] || ""))]
     .map(row => row.map(cell => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
-  return parseSangerPaste(csv, order, "", "Plasmid DNA", true);
+  return parseSangerPaste(csv, order, "", "Plasmid DNA", true, sheet.primerCommaMode);
 }

@@ -1,5 +1,5 @@
 /* Sanger sample-preparation reference; intentionally static and printable. */
-body.preparation-page{background:#fff;color:#173859}
+body.preparation-page{background:#f6f9f8;color:#173859}
 body.preparation-page main{font-family:'DM Sans',Arial,sans-serif;font-size:17px}
 body.preparation-page main h1,body.preparation-page main h2,body.preparation-page main h3{font-family:'DM Sans',Arial,sans-serif;color:#173859;font-weight:500}
 body.preparation-page main h1{font-size:clamp(42px,5.1vw,68px);line-height:1.08;letter-spacing:-.045em;margin:0 0 24px;max-width:950px}
@@ -30,16 +30,16 @@ body.preparation-page main .prep-contents>p{font-size:11px;letter-spacing:1.5px;
 body.preparation-page main .prep-contents li{font-size:14px;line-height:1.55}
 body.preparation-page main .prep-contents a{display:block;color:#4e676e;text-decoration:none}
 body.preparation-page main .prep-contents a:hover{color:#007e70;text-decoration:underline}
-.prep-body{min-width:0}
+.prep-body{min-width:0;display:grid;gap:24px}
 .prep-body section[id]{scroll-margin-top:130px}
-.prep-confirm{padding:26px 30px;background:#edf8f3;border-left:3px solid #008b79;border-radius:0 5px 5px 0}
+.prep-confirm{padding:26px 30px;background:#edf8f3;border-left:3px solid #008b79;border-radius:0 12px 12px 0}
 .prep-section-number{display:block;font:600 11px/1.5 'DM Sans',Arial,sans-serif;letter-spacing:1.4px;color:#008476;margin-bottom:13px}
 body.preparation-page main .prep-confirm h2{font-size:26px;margin-bottom:12px}
 .prep-confirm p{margin:0 0 14px}
 body.preparation-page main .prep-text-link{display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:600;line-height:1.5;color:#007e70;text-decoration:none}
 body.preparation-page main .prep-text-link:hover{text-decoration:underline}
-.prep-section{padding:48px 0;border-bottom:1px solid #dbe5e1}
-.prep-section>p{margin:0 0 22px}
+.prep-guide-section{padding:32px;background:#fff;border:1px solid #dbe5e1;border-radius:12px}
+.prep-guide-section>p{margin:0 0 22px}
 .prep-section-heading{margin-bottom:17px}
 .prep-section-heading h2{max-width:660px}
 .prep-table-wrap{max-width:100%;overflow-x:auto;border:1px solid #d6e2df;border-radius:5px;margin:22px 0 18px;scrollbar-color:#9dbfaf #f0f5f2}
@@ -79,7 +79,7 @@ body.preparation-page main .prep-plate-options h3{font-size:18px;margin-bottom:1
 .prep-delivery-steps>li>span{display:grid;place-items:center;width:35px;height:35px;border-radius:50%;border:1px solid #b9d8c9;color:#008476;font-size:14px;line-height:1;background:#edf8f3}
 .prep-delivery-steps h3{padding-top:4px}
 .prep-delivery-steps p{margin:0 0 14px}
-.prep-help{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:30px;margin-top:40px;background:#173859;color:#fff;border-radius:5px}
+.prep-help{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:30px;margin-top:8px;background:#173859;color:#fff;border-radius:5px}
 body.preparation-page main .prep-help h2{font-size:25px;color:#eef9f5;letter-spacing:-.02em;margin-bottom:13px}
 body.preparation-page main .prep-help p{font-size:15px;line-height:1.7;color:#cadbdc;margin:0}
 .prep-help-links{display:flex;flex-direction:column;align-items:center;gap:15px}
@@ -87,7 +87,7 @@ body.preparation-page main .prep-help-links .button{background:#c9eee2;color:#17
 body.preparation-page main .prep-help-links>a:not(.button){font-size:15px;color:#d9eee8;white-space:nowrap}
 @media(max-width:1100px){.prep-layout{grid-template-columns:160px minmax(0,1fr);gap:30px}.prep-width{width:90%}.prep-help{grid-template-columns:1fr}.prep-help-links{flex-direction:row;justify-content:flex-start;flex-wrap:wrap}.prep-info-card{padding:20px}.prep-facts{gap:9px}.prep-facts>div{padding:13px}}
 @media(max-width:760px){
-  .prep-width{width:88%}
+  .prep-width{width:calc(100% - 32px)}
   .prep-hero{padding:25px 0 30px}
   body.preparation-page main h1{font-size:43px;letter-spacing:-.04em}
   body.preparation-page main h2{font-size:29px}
@@ -108,7 +108,7 @@ body.preparation-page main .prep-help-links>a:not(.button){font-size:15px;color:
   .prep-confirm{padding:22px 20px}
   body.preparation-page main .prep-confirm h2{font-size:24px}
   .prep-body section[id]{scroll-margin-top:100px}
-  .prep-section{padding:35px 0}
+  .prep-guide-section{padding:24px 18px}
   .prep-table-wrap{margin-top:19px}
   .prep-table{font-size:14px;min-width:550px}
   .prep-table th,.prep-table td{padding:13px 14px}
@@ -123,7 +123,7 @@ body.preparation-page main .prep-help-links>a:not(.button){font-size:15px;color:
   .prep-delivery-steps>li{grid-template-columns:30px minmax(0,1fr);gap:14px}
   .prep-delivery-steps>li>span{width:30px;height:30px}
   .prep-delivery-steps h3{padding-top:1px}
-  .prep-help{padding:25px 22px;margin-top:30px;gap:22px}
+  .prep-help{padding:25px 22px;margin-top:0;gap:22px}
   body.preparation-page main .prep-help h2{font-size:25px}
 }
 @media(prefers-reduced-motion:reduce){html:has(>body.preparation-page){scroll-behavior:auto}}
@@ -131,7 +131,7 @@ body.preparation-page main .prep-help-links>a:not(.button){font-size:15px;color:
   @page{size:auto;margin:15mm}
   html:has(>body.preparation-page){scroll-padding-top:0;scroll-behavior:auto}
   body.preparation-page{background:#fff;color:#000}
-  .preparation-page>.site-top,.preparation-page>.site-header,.preparation-page>.site-footer,.prep-skip,.prep-contents,.prep-back,.prep-format-links,.prep-help-links,.prep-section>.prep-text-link{display:none!important}
+  .preparation-page>.site-top,.preparation-page>.site-header,.preparation-page>.site-footer,.prep-skip,.prep-contents,.prep-back,.prep-format-links,.prep-help-links,.prep-guide-section>.prep-text-link{display:none!important}
   .prep-width{width:100%;max-width:none}
   .prep-hero{padding:0 0 16px;background:none;border-bottom:1px solid #aaa}
   .prep-layout{display:block;padding:16px 0 0}
@@ -139,7 +139,7 @@ body.preparation-page main .prep-help-links>a:not(.button){font-size:15px;color:
   body.preparation-page main h2,body.preparation-page main .prep-confirm h2,body.preparation-page main .prep-help h2{font-size:19px;color:#000}
   body.preparation-page main h3{font-size:14px;color:#000}
   body.preparation-page main p,body.preparation-page main li,body.preparation-page main .prep-lead,body.preparation-page main .prep-scope,body.preparation-page main .prep-table-note,body.preparation-page main .prep-quantity-note,body.preparation-page main .prep-help p{font-size:10px;line-height:1.5;color:#222}
-  .prep-section{padding:20px 0}
+  .prep-guide-section{padding:20px 0;border:0;border-radius:0}
   .prep-section-heading{break-after:avoid}
   .prep-section-number{font-size:9px;margin-bottom:7px;color:#333}
   .prep-confirm,.prep-help{padding:14px;background:#f4f4f4;color:#000;border:1px solid #ccc;break-inside:avoid}

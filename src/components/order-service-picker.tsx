@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, CircleDot, Dna, FlaskConical, Waves } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CircleDot, Dna, FlaskConical, Waves, ChartColumn } from "lucide-react";
 import Link from "next/link";
 
 import { ORDER_SERVICES, orderServiceUrl, type OrderService, type ServiceOption } from "@/lib/order-services";
@@ -27,9 +27,9 @@ export function ServicePicker({ dropboxId }: { dropboxId?: string } = {}) {
     </header>
     <div className="order-service-grid">
       {ORDER_SERVICES.map((service, index) => {
-        const Icon = service.id === "oligo" ? Dna : service.id === "whole-plasmid" ? CircleDot : Waves;
+        const Icon = service.id === "fragment-analysis" ? ChartColumn : service.id === "oligo" ? Dna : service.id === "whole-plasmid" ? CircleDot : Waves;
         return <Link key={service.id} href={dropboxId ? dropboxOrderUrl(service.id, dropboxId) : orderServiceUrl(service.id)} className={`order-service-card order-service-${service.id}`}>
-          <div className="order-service-art" aria-hidden="true"><span className="order-service-number">0{index + 1}</span><Icon strokeWidth={1.25} /><span className="order-service-motif">{service.id === "oligo" ? "A · T · G · C" : service.id === "whole-plasmid" ? "INSERT + BACKBONE" : "ONE REGION. CLEAR ANSWERS."}</span></div>
+          <div className="order-service-art" aria-hidden="true"><span className="order-service-number">0{index + 1}</span><Icon strokeWidth={1.25} /><span className="order-service-motif">{service.id === "fragment-analysis" ? "FLUORESCENT FRAGMENT SIZING" : service.id === "oligo" ? "A · T · G · C" : service.id === "whole-plasmid" ? "INSERT + BACKBONE" : "ONE REGION. CLEAR ANSWERS."}</span></div>
           <div className="order-service-content"><h2>{service.name}</h2><p>{service.description}</p><span className="order-service-caption">{service.caption}</span><span className="order-service-action">Select service <ArrowRight size={18} aria-hidden="true" /></span></div>
         </Link>;
       })}

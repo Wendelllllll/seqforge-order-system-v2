@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_OLIGO_PRICING, type OligoPricing } from "./rate-schedule";
 
 export const OLIGO_PURIFICATIONS = ["Desalted", "Cartridge", "HPLC", "PAGE"] as const;
 export const OLIGO_SCALES = ["25 nmol", "100 nmol", "250 nmol", "1 umol", "10 umol"] as const;
@@ -6,8 +7,13 @@ export const OLIGO_FORMATS = ["Dry", "Resuspended"] as const;
 export const MAX_OLIGOS = 250;
 export const OLIGO_QUOTE_NOTICE = "Price pending lab confirmation. Production starts only after you approve the quote. Requested specifications, delivery, taxes and shipping will be confirmed by the lab.";
 export const OLIGO_BASE_RATE_CENTS = 25;
-export const OLIGO_STANDARD_MAX_BASES = 59;
-export const OLIGO_BASE_PRICE_NOTICE = `Standard DNA oligos shorter than ${OLIGO_STANDARD_MAX_BASES + 1} bases at 25 nmol with Desalted purification and no modifications are $0.25 per base. Oligos of ${OLIGO_STANDARD_MAX_BASES + 1} bases or longer, other scales, purification and modifications require a separate quote. Delivery form, taxes and shipping require lab confirmation. Production starts only after you approve the final quote.`;
+export const OLIGO_STANDARD_MAX_BASES = 60;
+export const OLIGO_LONG_RATE_CENTS = 70;
+export function oligoPriceNotice(config: OligoPricing = DEFAULT_OLIGO_PRICING) {
+  const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+  return `Standard DNA oligos at 25 nmol with Desalted purification and no modifications cost ${money(config.shortUnitCents)} per base up to ${config.shortMaxBases} bases${config.longUnitCents === null ? "; longer oligos require a separate quote" : ` and ${money(config.longUnitCents)} per base above ${config.shortMaxBases} bases (the selected rate applies to the full oligo)`}. Other scales, purification and modifications require a separate quote. Delivery form, taxes and shipping require lab confirmation. Production starts only after you approve the final quote.`;
+}
+export const OLIGO_BASE_PRICE_NOTICE = oligoPriceNotice();
 
 const modification = z.string().trim().max(200);
 export const oligoSchema = z.object({
@@ -33,9 +39,9 @@ export function readOligoSnapshot(value: unknown) {
 export function hasOligoModifications(item: OligoDraft) {
   return Boolean(item.modification5.trim() || item.modification3.trim() || item.modificationInternal.trim());
 }
-export function hasStandardOligoPrice(item: OligoDraft) {
+export function hasStandardOligoPrice(item: OligoDraft, config: OligoPricing = DEFAULT_OLIGO_PRICING) {
   const length = item.sequence.replace(/\s/g, "").length;
-  return length > 0 && length <= OLIGO_STANDARD_MAX_BASES && item.synthesisScale === "25 nmol" && item.purification === "Desalted" && !hasOligoModifications(item);
+  return length > 0 && length <= 500 && (length <= config.shortMaxBases || config.longUnitCents !== null) && item.synthesisScale === "25 nmol" && item.purification === "Desalted" && !hasOligoModifications(item);
 }
 export function oligoCount(value: unknown) { return readOligoSnapshot(value)?.items.length ?? 0; }
 

@@ -47,6 +47,11 @@ export const ORDER_SERVICES: readonly OrderService[] = [
       { id: "pre-mixed", name: "Pre-mixed", description: "Send DNA and primer already mixed together.", submissionMode: "Pre-mixed" },
     ],
   },
+  {
+    id: "fragment-analysis", name: "Fragment Analysis", shortName: "Fragment Analysis",
+    description: "Submit fluorescently labeled PCR products for fragment sizing and analysis.",
+    caption: "Tubes or 96-well plates · Quote required", options: [],
+  },
 ];
 
 export function orderServiceUrl(service?: string, option?: string) {

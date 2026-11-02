@@ -15,7 +15,7 @@ COPY prisma/schema.prisma ./prisma/schema.prisma
 COPY prisma/migrations ./prisma/migrations
 COPY src ./src
 COPY public ./public
-COPY scripts/seed-dropboxes.ts scripts/internal-mail.ts ./scripts/
+COPY scripts/seed-dropboxes.ts scripts/internal-mail.ts scripts/initialize-pricing-catalog.ts ./scripts/
 # Parsing config/generating Prisma requires a URL. These are inert build values,
 # not deployment credentials. Building must not require the real database.
 RUN DATABASE_URL='postgresql://build:build@127.0.0.1:1/build?connect_timeout=1' \

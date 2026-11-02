@@ -14,13 +14,19 @@ import { blankDefaults, type OrderDefaults } from "@/lib/order-defaults";
 import { blankOrder, issueLabel, MAX_IMPORT_BYTES, orderSchema, type OrderDraft } from "@/lib/order-intake";
 import { emailVerificationUrl, orderLoginUrl, orderReturnPath, type OrderResumeState } from "@/lib/order-resume";
 import { blankOligo, inspectOligoSheet, oligoBaseCount, oligoTemplate, parseMappedOligos } from "@/lib/oligo-entry";
-import { OLIGO_BASE_PRICE_NOTICE, OLIGO_BASE_RATE_CENTS, OLIGO_STANDARD_MAX_BASES, type OligoDraft } from "@/lib/oligo-schema";
-import { formatMoney, priceOrder } from "@/lib/pricing";
+import { oligoPriceNotice, type OligoDraft } from "@/lib/oligo-schema";
+import { formatMoney, priceOrder, validateOrderAddOns } from "@/lib/pricing";
+import { getOligoPricing, rateScheduleSchema, type RateSchedule } from "@/lib/rate-schedule";
+import { OrderAddOns } from "@/components/order-add-ons";
+import { useCurrentOrderPricing } from "@/components/use-current-order-pricing";
 import type { MappingSheet } from "@/lib/sanger-column-mapping";
 
-export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modified = false }: { userId?: string | null; defaults?: OrderDefaults; modified?: boolean }) {
+export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modified = false, initialSchedule }: { userId?: string | null; defaults?: OrderDefaults; modified?: boolean; initialSchedule: RateSchedule }) {
   const router = useRouter();
   const mode = modified ? "Oligo modified" : "Oligo standard";
+  const [schedule, setSchedule] = useState(initialSchedule);
+  const [priceNotice, setPriceNotice] = useState("");
+  const oligoRates = getOligoPricing(schedule);
   const [draft, setDraft] = useState<OrderDraft>(() => ({ ...blankOrder(), service: "OLIGO", submissionMode: mode, samples: [], oligos: [blankOligo()], oligoShippingAddress: "", oligoFormat: "Dry", fulfillment: defaults }));
   const [step, setStep] = useState<"samples" | "details">("samples");
   const [review, setReview] = useState<OrderDraft | null>(null);
@@ -43,17 +49,35 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
   const items = draft.oligos || [];
   const enteredItems = items.filter(item => item.name.trim() || item.sequence.trim());
   const bases = oligoBaseCount(enteredItems);
+  let additionalServicesError = "";
+  try { validateOrderAddOns(draft, schedule); } catch (error) { additionalServicesError = error instanceof Error ? error.message : "Review your additional services."; }
   const livePrice = (() => {
-    try { return priceOrder({ ...draft, oligos: enteredItems }); }
+    try { return priceOrder({ ...draft, oligos: enteredItems }, schedule); }
     catch { return null; }
   })();
-  const resumeState: OrderResumeState = { draft, step, review: !!review, entryMethod, bulkText, mappingSheet, oligoPendingImport: pendingImport, pendingImport: null, submissionKey, shareText: "", pasteSource: "", imported: false, sampleCount: 1 };
+  const resumeState: OrderResumeState = { draft, step, review: !!review, entryMethod, bulkText, mappingSheet, oligoPendingImport: pendingImport, pendingImport: null, submissionKey, shareText: "", pasteSource: "", imported: false, sampleCount: 1, pricingSchedule: schedule, priceNotice };
   const resume = useOrderDraft(mode, userId, resumeState, saved => {
     setDraft(saved.draft); setStep(saved.review ? "details" : saved.step); setEntryMethod(saved.entryMethod === "manual" ? "manual" : "paste");
     setBulkText(saved.bulkText); setMappingSheet(saved.mappingSheet); setPendingImport(saved.oligoPendingImport || null); setSubmissionKey(saved.submissionKey);
+    const previous = saved.pricingSchedule;
+    const changed = !previous || previous.revision !== initialSchedule.revision || (previous.customerRevision ?? 0) !== (initialSchedule.customerRevision ?? 0) || JSON.stringify(getOligoPricing(previous)) !== JSON.stringify(getOligoPricing(initialSchedule)) || JSON.stringify(previous.addOns || []) !== JSON.stringify(initialSchedule.addOns || []);
+    setSchedule(initialSchedule);
+    setPriceNotice(changed ? "Prices have changed since this draft was saved. Review the current length tiers, selected services and total before submitting." : saved.priceNotice || "");
     const parsed = orderSchema.safeParse(saved.draft);
-    if (saved.review && parsed.success) setReview(parsed.data);
+    if (saved.review && parsed.success) { try { validateOrderAddOns(parsed.data, initialSchedule); setReview(parsed.data); } catch { setStep("samples"); } }
     setMessage("Your draft has been restored. Check your sequences and specifications before submitting.");
+  });
+  const catalog = useCurrentOrderPricing({
+    userId, schedule, enabled: resume.ready && !resume.pendingDraft, paused: loading || !!submissionKey,
+    onAccountChange: () => setAccountChanged(true),
+    onUpdate: latest => {
+      setSchedule(latest);
+      setPriceNotice("Services or prices have changed. Review your selections and the current total before submitting.");
+      if (review) {
+        try { validateOrderAddOns(review, latest); }
+        catch { setReview(null); setStep("samples"); }
+      }
+    },
   });
 
   function invalidateImportRead() { importRevision.current++; setReadingFile(false); }
@@ -80,6 +104,7 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
     } else {
       const result = orderSchema.safeParse(draft);
       if (!result.success) { showErrors(result.error.issues.map(issueLabel)); return; }
+      try { validateOrderAddOns(result.data, schedule); } catch (error) { showErrors([error instanceof Error ? error.message : "Review your additional services."]); setStep("samples"); return; }
       setDraft(result.data); setReview(result.data); setErrors([]);
       requestAnimationFrame(() => headingRef.current?.focus());
     }
@@ -89,13 +114,13 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
     if (resume.save({ ...resumeState, submissionKey: key })) window.location.assign(orderLoginUrl(mode));
   }
   async function submitOrder() {
-    if (!review || submitting.current || accountChanged) return;
+    if (!review || submitting.current || accountChanged || priceNotice) return;
     if (readingFile || pendingImport || bulkText.trim()) { setReview(null); setStep("samples"); setEntryMethod("paste"); showErrors(["Finish applying or discard your spreadsheet before submitting."]); return; }
     if (!userId) { signIn(); return; }
     submitting.current = true; setLoading(true); setErrors([]);
     const key = submissionKey || crypto.randomUUID(); setSubmissionKey(key);
     try {
-      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key, "X-Pricing-Customer-Id": userId }, body: JSON.stringify(review) });
+      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key, "X-Pricing-Customer-Id": userId, "X-Pricing-Revision": String(schedule.revision), "X-Customer-Pricing-Revision": String(schedule.customerRevision ?? 0), "X-Pricing-Catalog-Version": "2" }, body: JSON.stringify(review) });
       if (response.status === 401) { signIn(key); return; }
       const payload = await response.json();
       if (response.status === 403 && payload.code === "EMAIL_NOT_VERIFIED") {
@@ -105,6 +130,13 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
       if (response.status === 409 && payload.code === "ACCOUNT_CHANGED") {
         setAccountChanged(true);
         showErrors(["The signed-in account changed in another tab. Reload to use that account's own draft, or sign back in to the account that started this order. This draft remains saved for its original account."]);
+        return;
+      }
+      if (response.status === 409 && payload.code === "PRICE_CHANGED") {
+        const latest = rateScheduleSchema.parse(payload.schedule);
+        setSchedule(latest); setSubmissionKey("");
+        setPriceNotice("The price schedule has changed. Review the updated length tiers, selected services and order estimate, then confirm again. No order has been created.");
+        try { validateOrderAddOns(review, latest); } catch { setReview(null); setStep("samples"); }
         return;
       }
       if (!response.ok) { showErrors(Array.isArray(payload.issues) ? payload.issues : [payload.error || "Unable to submit your order."]); return; }
@@ -160,12 +192,15 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
   if (review) return <div className="space-y-6">
     {notice}<h2 ref={headingRef} tabIndex={-1} className="text-2xl font-bold">Review your Oligo order</h2>
     <p className="text-sm text-slate-600">Check each sequence in the 5′ to 3′ direction, requested specifications, base synthesis estimate and shipping address. The lab will confirm final charges; production starts only after you approve the quote.</p>
-    <OrderManifest order={{ ...review, oligoSnapshot: { items: review.oligos, shippingAddress: review.oligoShippingAddress, format: review.oligoFormat }, fulfillmentSnapshot: review.fulfillment, pricingSnapshot: priceOrder(review) }} />
-    {errorPanel}{accountChanged && <button type="button" className="button-secondary" onClick={() => window.location.reload()}>Reload for current account</button>}<div className="flex flex-wrap justify-end gap-3"><button type="button" className="button-secondary" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }}>Edit oligos</button><button type="button" className="button-secondary" disabled={loading} onClick={() => { setReview(null); setErrors([]); }}>Edit delivery & billing</button><button type="button" className="button-primary" disabled={loading || accountChanged} onClick={submitOrder}>{loading && <LoaderCircle size={16} className="animate-spin" />}{userId ? "Submit for price confirmation" : "Sign in to submit order"}</button></div>
+    <OrderManifest order={{ ...review, oligoSnapshot: { items: review.oligos, shippingAddress: review.oligoShippingAddress, format: review.oligoFormat }, fulfillmentSnapshot: review.fulfillment, pricingSnapshot: priceOrder(review, schedule) }} />
+    {priceNotice && <div role="alert" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950"><p className="font-bold">Please confirm the updated price</p><p>{priceNotice}</p><label className="flex items-center gap-3"><input type="checkbox" checked={false} onChange={() => setPriceNotice("")} />I have reviewed the updated estimate and length tiers.</label></div>}
+    {errorPanel}{accountChanged && <button type="button" className="button-secondary" onClick={() => window.location.reload()}>Reload for current account</button>}<div className="flex flex-wrap justify-end gap-3"><button type="button" className="button-secondary" disabled={loading} onClick={() => { setReview(null); setStep("samples"); setErrors([]); }}>Edit oligos</button><button type="button" className="button-secondary" disabled={loading} onClick={() => { setReview(null); setErrors([]); }}>Edit delivery & billing</button><button type="button" className="button-primary" disabled={loading || accountChanged || !!priceNotice} onClick={submitOrder}>{loading && <LoaderCircle size={16} className="animate-spin" />}{userId ? "Submit for price confirmation" : "Sign in to submit order"}</button></div>
   </div>;
 
   return <form noValidate method="post" onSubmit={nextStep} className="sanger-order-form space-y-6">
-    {notice}
+    {accountChanged && <div role="alert" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-950">The signed-in account changed. Your draft is saved for its original account. <button type="button" className="font-semibold underline" onClick={() => window.location.reload()}>Reload for current account</button></div>}
+    {step === "samples" && catalog.status && <p role="status" className="text-xs text-slate-600">{catalog.status} <button type="button" disabled={catalog.refreshing} className="font-semibold underline" onClick={() => void catalog.refresh(true)}>{catalog.refreshing ? "Refreshing…" : "Refresh services"}</button></p>}
+    {notice}{additionalServicesError && <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-950">{additionalServicesError}</p>}
     <div className="sanger-order-summary"><div><span className="eyebrow">Oligo synthesis</span><h2>{modified ? "Modified DNA oligos" : "Standard DNA oligos"}</h2><p>One row per oligo. Enter your DNA sequence 5′ → 3′{modified ? ", with modifications in their own fields" : ""}. Requested scale, purification and availability are confirmed by the lab.</p></div><div className="sanger-counts" aria-live="polite"><strong><b className="sanger-count-value" key={`o${enteredItems.length}`}>{enteredItems.length}</b><span>oligos</span></strong><strong><b className="sanger-count-value" key={`b${bases}`}>{bases.toLocaleString()}</b><span>total bases</span></strong></div></div>
     <div className="sanger-flow-layout"><div className="sanger-flow-main space-y-6">
       <div className="sanger-stage"><span aria-current={step === "samples" ? "step" : undefined}>1. Oligos & specifications</span><span aria-current={step === "details" ? "step" : undefined}>2. Delivery & billing</span><span>3. Review</span></div>
@@ -197,12 +232,13 @@ export function OligoOrderForm({ userId = null, defaults = blankDefaults(), modi
         <section className="panel space-y-5 p-5 sm:p-6"><p className="eyebrow">Billing</p><OrderDefaultFields section="payment" value={draft.fulfillment} onChange={value => update("fulfillment", value)} /><TextField label={draft.fulfillment.paymentMethod === "Purchase order" ? "PO number *" : "PO number (optional)"} maxLength={80} value={draft.poNumber} onChange={value => update("poNumber", value)} /><p className="text-sm text-slate-500">The lab will use the billing email and contact phone to follow up on your quote. No payment is collected here.</p></section>
         <section className="panel space-y-4 p-5 sm:p-6"><Field label="Special instructions (optional)" hint="For example, requested buffer / concentration, packaging, or a date you are working toward. Requests need lab confirmation."><textarea className="field-input min-h-24" maxLength={2000} value={draft.specialInstructions} onChange={event => update("specialInstructions", event.target.value)} /></Field></section>
       </>}
+      {step === "samples" && <OrderAddOns draft={draft} schedule={schedule} onChange={value => update("addOnIds", value.addOnIds)} />}
       <div className="flex flex-wrap justify-between gap-3"><button type="button" className="button-secondary" onClick={() => { if (step === "details") { setStep("samples"); setErrors([]); } else router.push("/orders/new?service=oligo"); }}><ArrowLeft size={16} />{step === "details" ? "Back to oligos" : "Back to Oligo options"}</button><button type="submit" disabled={readingFile} className="button-primary">{step === "samples" ? "Continue to delivery & billing" : "Review order"}<ArrowRight size={16} /></button></div>
     </div>
     <aside className="sanger-live-summary" aria-label="Live order summary"><div className="sanger-live-heading"><span className="eyebrow">Your order</span><Dna size={25} strokeWidth={1.5} /></div><h2>Oligo synthesis <span>{modified ? "Modified DNA" : "Standard DNA"}</span></h2>
       <div className="sanger-live-counts" aria-live="polite"><div><strong>{enteredItems.length}</strong><span>oligos</span></div><div><strong>{bases.toLocaleString()}</strong><span>total bases</span></div></div>
       <ol className="sanger-live-progress"><li data-active={step === "samples"}>{step === "details" ? <Check size={16} /> : <Circle size={16} />}<span>Oligos & specifications<small>{bulkText.trim() ? "Apply your spreadsheet" : "Build your sequence list"}</small></span></li><li data-active={step === "details"}><Circle size={16} /><span>Delivery & billing<small>Where to send your oligos</small></span></li><li><Circle size={16} /><span>Review & submit<small>Request your lab quote</small></span></li></ol>
-      <div className="sanger-live-price"><p>Standard DNA · under {OLIGO_STANDARD_MAX_BASES + 1} bases · {formatMoney(OLIGO_BASE_RATE_CENTS)} / base</p>{livePrice ? <>{livePrice.lines.length > 0 && <p>{livePrice.lines.reduce((sum, line) => sum + line.quantity, 0).toLocaleString()} standard bases × {formatMoney(OLIGO_BASE_RATE_CENTS)}</p>}{livePrice.knownSubtotalCents !== undefined && <div><span>Standard oligos only</span><strong>{formatMoney(livePrice.knownSubtotalCents)}</strong></div>}<div><span>{livePrice.pendingQuote ? "Final order total" : "Base synthesis estimate"}</span><strong>{formatMoney(livePrice.subtotalCents)}</strong></div>{!!livePrice.unpricedItems?.length && <p className="text-sm">{livePrice.unpricedItems.length} {livePrice.unpricedItems.length === 1 ? "oligo requires" : "oligos require"} a separate quote.</p>}</> : <p className="text-sm">Complete valid oligo names and DNA sequences to see your estimate.</p>}<small>{OLIGO_BASE_PRICE_NOTICE} No payment is collected here.</small></div>
+      <div className="sanger-live-price"><p>Standard DNA · ≤{oligoRates.shortMaxBases} bases: {formatMoney(oligoRates.shortUnitCents)} / base{schedule.overriddenOligoKeys?.includes("shortUnitCents") && <span className="block font-semibold text-teal-800">Customer price</span>}<br />&gt;{oligoRates.shortMaxBases} bases: {oligoRates.longUnitCents === null ? "Separate quote" : `${formatMoney(oligoRates.longUnitCents)} / base`}{schedule.overriddenOligoKeys?.includes("longUnitCents") && <span className="block font-semibold text-teal-800">Customer price</span>}</p>{livePrice ? <>{livePrice.lines.map((line, index) => <p key={index}>{line.description}<br />{line.customPrice && <span className="font-semibold text-teal-800">Customer price · </span>}{line.quantity} {line.unit || "base"}{line.quantity === 1 ? "" : "s"} × {formatMoney(line.unitCents)}</p>)}{livePrice.knownSubtotalCents !== undefined && <div><span>Priced items subtotal</span><strong>{formatMoney(livePrice.knownSubtotalCents)}</strong></div>}<div><span>{livePrice.pendingQuote ? "Final order total" : "Order estimate"}</span><strong>{formatMoney(livePrice.subtotalCents)}</strong></div>{!!livePrice.unpricedItems?.length && <p className="text-sm">{livePrice.unpricedItems.length} {livePrice.unpricedItems.length === 1 ? "oligo requires" : "oligos require"} a separate quote.</p>}</> : <p className="text-sm">Complete valid oligo names and DNA sequences to see your estimate.</p>}<small>{oligoPriceNotice(oligoRates)} No payment is collected here.</small></div>
       {bulkText.trim() && <p className="sanger-import-note" role="status">Spreadsheet not applied yet. Counts reflect your oligo table.</p>}
     </aside></div>
   </form>;

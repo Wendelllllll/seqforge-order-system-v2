@@ -23,6 +23,7 @@ export type InternalMailMessage = {
   recipient: string;
   subject: string;
   text: string;
+  replyTo?: string;
 };
 
 type MailErrorCode =
@@ -107,6 +108,7 @@ export async function sendInternalMail(
   if (singleAddress(message.recipient) !== singleAddress(config.recipient)) throw new InternalMailError("RECIPIENT_CHANGED");
   const recipient = singleAddress(config.recipient);
   const from = singleAddress(config.from);
+  const replyTo = message.replyTo === undefined ? undefined : singleAddress(message.replyTo);
   if (!message.id || !message.subject.trim() || !message.text) throw new InternalMailError("MAIL_CONFIG_INVALID");
   const messageId = `<seqforge-${createHash("sha256").update(message.id).digest("hex")}@${from.split("@")[1]}>`;
   let transport: InternalMailTransport | undefined;
@@ -127,6 +129,7 @@ export async function sendInternalMail(
     const result = await transport.sendMail({
       from,
       to: recipient,
+      ...(replyTo ? { replyTo } : {}),
       envelope: { from, to: [recipient] },
       messageId,
       subject: message.subject.replace(/[\r\n]+/g, " ").slice(0, 180),

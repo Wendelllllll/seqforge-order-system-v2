@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { enqueueOrderAttention, enqueueResultReady } from "./customer-notifications";
 import { isOligoProductionBlocked } from "./oligo-schema";
+import { isFragmentProductionBlocked } from "./fragment-analysis";
 import { isOrderStatus, type OrderStatus } from "./orders";
 
 export class OrderStatusError extends Error {
@@ -52,6 +53,7 @@ export async function setOrderStatus(db: PrismaClient, id: string, status: Order
     if (options.expectedRevision !== undefined && options.expectedRevision !== order.statusRevision) {
       throw new OrderStatusError("Another staff member updated this order. Reload it and review the latest status before saving.", 409);
     }
+    if (isFragmentProductionBlocked(order.service, status)) throw new OrderStatusError("Fragment Analysis is awaiting method confirmation and customer quote approval. Analysis and completion are unavailable until an approved quote can be recorded.", 409);
     if (isOligoProductionBlocked(order.service, status)) {
       throw new OrderStatusError("This oligo request is awaiting a quote and customer approval. Production and completion are unavailable until an approved quote can be recorded.", 409);
     }

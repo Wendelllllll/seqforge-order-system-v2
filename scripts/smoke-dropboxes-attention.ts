@@ -43,7 +43,7 @@ export async function runDropboxAttentionSmoke({ base, db, customerCookie, admin
   assert.equal(adminSession.user.role, "admin");
   const schedule = await (await request("/api/account/pricing", customerCookie)).json() as { revision: number; customerRevision: number; customerId: string };
   assert.equal(schedule.customerId, customerSession.user.id);
-  const pricingHeaders = { "X-Pricing-Revision": String(schedule.revision), "X-Customer-Pricing-Revision": String(schedule.customerRevision), "X-Pricing-Customer-Id": schedule.customerId };
+  const pricingHeaders = { "X-Pricing-Revision": String(schedule.revision), "X-Pricing-Catalog-Version": "2", "X-Customer-Pricing-Revision": String(schedule.customerRevision), "X-Pricing-Customer-Id": schedule.customerId };
   const submit = (body: unknown, key = randomUUID()) => request("/api/orders", customerCookie, body, "POST", { ...pricingHeaders, "Idempotency-Key": key });
   const stamp = randomUUID().slice(0, 8);
   const locationInput: DropboxInput = {

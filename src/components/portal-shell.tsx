@@ -29,7 +29,6 @@ type ShellUser = {
 const customerNavigation = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Orders", icon: ClipboardList },
-  { href: "/orders/new", label: "New order", icon: Plus },
   { href: "/account", label: "Account", icon: UserRound },
   { href: "/dropboxes", label: "Dropboxes", icon: MapPin },
 ];
@@ -65,7 +64,11 @@ export function PortalShell({
   return (
     <div className="portal-shell min-h-screen">
       <header className="workspace-header"><Brand /><div className="workspace-identity">{user ? <><span>{user.name}</span><button type="button" onClick={signOut}><LogOut size={16} /> Log out</button></> : <><span>Start your order · sign in when you’re ready</span><a className="button-secondary" href="/login?next=%2Forders%2Fnew" onClick={event => { event.preventDefault(); router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`); }}>Sign in</a></>}</div></header>
-      <div className="workspace-navigation"><span>{role === "admin" ? "LABORATORY OPERATIONS" : "YOUR RESEARCH WORKSPACE"}</span><nav aria-label="Primary navigation">{navigation.map(item => { const Icon=item.icon; const active=!item.href.includes("#") && (item.href === "/orders" ? pathname === "/orders" || (pathname.startsWith("/orders/") && pathname !== "/orders/new") : pathname === item.href || (["/admin/orders", "/admin/customers"].includes(item.href) && pathname.startsWith(item.href + "/"))); return <Link key={item.label} href={item.href} aria-current={active ? "page" : undefined} className={active ? "workspace-active" : ""}><Icon size={17}/>{item.label}</Link> })}</nav><a href="/">Explore SeqForge <ArrowUpRight size={15}/></a></div>
+      <div className={`workspace-navigation${role === "customer" ? " workspace-navigation--customer" : ""}`}>
+        <span>{role === "admin" ? "LABORATORY OPERATIONS" : "YOUR RESEARCH WORKSPACE"}</span>
+        <nav aria-label="Primary navigation">{navigation.map(item => { const Icon=item.icon; const active=!item.href.includes("#") && (item.href === "/orders" ? pathname === "/orders" || (pathname.startsWith("/orders/") && pathname !== "/orders/new") : pathname === item.href || (["/admin/orders", "/admin/customers"].includes(item.href) && pathname.startsWith(item.href + "/"))); return <Link key={item.label} href={item.href} aria-current={active ? "page" : undefined} className={active ? "workspace-active" : ""}><Icon size={17} aria-hidden="true"/>{item.label}</Link> })}</nav>
+        {role === "customer" ? <div className="workspace-customer-actions"><a className="workspace-explore" href="/">Explore SeqForge <ArrowUpRight size={15} aria-hidden="true"/></a><Link href="/orders/new" className="customer-order-button" aria-current={pathname === "/orders/new" ? "page" : undefined}><Plus size={21} aria-hidden="true"/>New order</Link></div> : <a href="/">Explore SeqForge <ArrowUpRight size={15} aria-hidden="true"/></a>}
+      </div>
       <main className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">{children}</main>
       <footer className="workspace-footer">SeqForge Inc. <a href="/contact">Contact our team</a></footer>
     </div>

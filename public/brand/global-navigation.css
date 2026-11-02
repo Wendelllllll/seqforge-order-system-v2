@@ -72,10 +72,10 @@
 .site-page .page-nav {top:var(--global-nav-height)}
 html:has(>body.site-page) {scroll-padding-top:180px}
 
-@media(max-width:1200px) {
+@media(max-width:1450px) {
   :is(.lab-home,.site-page)>header {gap:19px}
-  :is(.lab-home,.site-page)>header .logo {width:205px}
-  :is(.lab-home,.site-page)>header>nav {gap:19px;font-size:16px}
+  :is(.lab-home,.site-page)>header .logo {width:190px}
+  :is(.lab-home,.site-page)>header>nav {gap:16px;font-size:15px}
   :is(.lab-home,.site-page)>header>.button {font-size:15px;padding:14px 17px}
 }
 @media(min-width:761px) and (max-width:1100px) {

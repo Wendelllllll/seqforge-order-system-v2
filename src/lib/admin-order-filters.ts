@@ -7,8 +7,8 @@ export function parseOrderFilters(query: OrderQuery) {
   const rawPage = Number(value("page"));
   return {
     q: value("q").slice(0, 120),
-    service: ["SANGER", "WHOLE_PLASMID", "OLIGO"].includes(value("service")) ? value("service") : "",
-    mode: ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid", "Oligo standard", "Oligo modified"].includes(value("mode")) ? value("mode") : "",
+    service: ["SANGER", "WHOLE_PLASMID", "OLIGO", "FRAGMENT_ANALYSIS"].includes(value("service")) ? value("service") : "",
+    mode: ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid", "Oligo standard", "Oligo modified", "Fragment analysis"].includes(value("mode")) ? value("mode") : "",
     status: isOrderStatus(value("status")) ? value("status") : "",
     customer: value("customer").slice(0, 128),
     page: Number.isSafeInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 100000) : 1,

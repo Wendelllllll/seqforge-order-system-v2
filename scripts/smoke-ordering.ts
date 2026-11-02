@@ -6,6 +6,10 @@ import { parseSangerPaste } from "../src/lib/sanger-entry";
 import { newPlasmidSample } from "../src/lib/whole-plasmid";
 import { runPasswordResetSmoke } from "./smoke-password-reset";
 import { runDropboxAttentionSmoke } from "./smoke-dropboxes-attention";
+import { DEFAULT_OLIGO_PRICING, DEFAULT_ADD_ONS } from "../src/lib/rate-schedule";
+import { runPricingCatalogSmoke } from "./smoke-pricing-catalog";
+import { runLargeSangerSmoke } from "./smoke-large-sanger";
+import { runFragmentSmoke } from "./smoke-fragment";
 
 // Only the isolated runner may supply the test server and disposable database schema.
 const origin = process.env.SEQFORGE_SMOKE_ORIGIN || "";
@@ -24,7 +28,7 @@ let initialPricingRevision = "";
 async function request(path: string, cookie = "", body?: unknown, method = body === undefined ? "GET" : "POST", extraHeaders: Record<string, string> = {}) {
   return fetch(origin + path, {
     method, redirect: "manual",
-    headers: { "Idempotency-Key": randomUUID(), "X-Pricing-Revision": initialPricingRevision, origin, ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...extraHeaders },
+    headers: { "Idempotency-Key": randomUUID(), "X-Pricing-Revision": initialPricingRevision, "X-Pricing-Catalog-Version": "2", origin, ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
@@ -211,8 +215,12 @@ async function verifyCustomer(cookie: string, email: string, next: string, exerc
 }
 
 async function main() {
+  const admin = await signIn("admin@seqforge.local", "SeqForgeDemo!2026");
+  const legacySchedule = await (await request("/api/pricing")).json();
+  const initialize = await request("/api/admin/pricing", admin, { revision: legacySchedule.revision, rates: legacySchedule.rates, oligo: DEFAULT_OLIGO_PRICING, addOns: DEFAULT_ADD_ONS, reason: "Initialize isolated catalog test" }, "PUT");
+  assert.equal(initialize.status, 200);
   const startingSchedule = await (await request("/api/pricing")).json();
-  assert.deepEqual(startingSchedule.oligo, { unitCents: 25, maxStandardLength: 59 }, "Public Oligo pricing matches the strict under-60-base standard tier");
+  assert.deepEqual(startingSchedule.oligo, DEFAULT_OLIGO_PRICING, "Public Oligo pricing follows managed length tiers");
   assert.ok(Number.isInteger(startingSchedule.revision) && startingSchedule.revision > 0);
   initialPricingRevision = String(startingSchedule.revision);
   const stamp = Date.now();
@@ -226,7 +234,6 @@ async function main() {
   const customerId = (await signup.json()).user.id as string;
   const customer = await signIn(email, password);
   const otherCustomer = await signIn("scientist@demo.local", "DemoCustomer!2026");
-  const admin = await signIn("admin@seqforge.local", "SeqForgeDemo!2026");
   const order = blankOrder();
   order.fulfillment = { deliveryMethod: "Pickup", pickupLocation: "Demo institute, building A, room 101", pickupInstructions: "Reception", contactName: "Demo Scientist", contactPhone: "555-0100", piName: "Demo PI", billingOrganization: "Demo University", billingContactName: "Demo Finance", billingEmail: "finance@demo.local", billingAddress: "1 Demo Way, Demo City", paymentMethod: "Invoice" };
   order.fulfillment.pickupLocation = `V4-PICKUP-${stamp}`;
@@ -279,7 +286,7 @@ async function main() {
   assert.equal((await fetch(origin + "/api/orders", { method: "POST", headers: { "Idempotency-Key": randomUUID(), cookie: customer, "Content-Type": "application/json", origin }, body: "{" })).status, 400);
   assert.equal((await fetch(origin + "/api/orders", { method: "POST", headers: { "Idempotency-Key": randomUUID(), cookie: customer, "Content-Type": "application/json", origin: "https://example.invalid" }, body: JSON.stringify(order) })).status, 403);
   const key = randomUUID();
-  const submit = (body: unknown) => fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": key, "X-Pricing-Revision": initialPricingRevision }, body: JSON.stringify(body) });
+  const submit = (body: unknown) => fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": key, "X-Pricing-Revision": initialPricingRevision, "X-Pricing-Catalog-Version": "2" }, body: JSON.stringify(body) });
   const created = await submit({ ...order, pricingSnapshot: { subtotalCents: 1 } });
   assert.equal(created.status, 201);
   const { id } = await created.json();
@@ -377,11 +384,11 @@ async function main() {
   ]) assert.equal((await request("/api/orders", customer, invalid)).status, 400, "Invalid Oligo specifications are rejected before saving");
   const oligoKey = randomUUID();
   const submitOligo = (body: unknown) => fetch(origin + "/api/orders", {
-    method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": oligoKey },
+    method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": oligoKey, "X-Pricing-Revision": initialPricingRevision, "X-Pricing-Catalog-Version": "2" },
     body: JSON.stringify(body),
   });
   const oligoResponse = await submitOligo({ ...oligo, pricingSnapshot: { subtotalCents: 1, pendingQuote: false } });
-  assert.equal(oligoResponse.status, 201, "Oligo orders do not require an unrelated sequencing rate revision");
+  assert.equal(oligoResponse.status, 201, "Oligo orders use the reviewed managed price revision");
   const oligoId = (await oligoResponse.json()).id;
   const oligoRetry = await submitOligo(oligo);
   assert.equal(oligoRetry.status, 201);
@@ -505,19 +512,41 @@ async function main() {
   assert.equal((await request("/api/admin/pricing", "", update, "PUT")).status, 403);
   assert.equal((await request("/api/admin/pricing", customer, update, "PUT")).status, 403);
   assert.equal((await request("/api/admin/pricing", admin, { ...update, rates: { ...update.rates, "plasmid-plate": -1 } }, "PUT")).status, 400);
-  assert.equal((await request("/api/admin/pricing", admin, { ...update, oligo: schedule.oligo }, "PUT")).status, 400, "Public Oligo pricing metadata is not an editable sequencing rate");
+  assert.equal((await request("/api/admin/pricing", admin, { ...update, oligo: { ...schedule.oligo, longUnitCents: -1 } }, "PUT")).status, 400, "Oligo prices must be valid nonnegative USD cents");
   const changed = await request("/api/admin/pricing", admin, update, "PUT");
   assert.equal(changed.status, 200); assert.equal((await changed.json()).revision, schedule.revision + 1);
   assert.equal((await request("/api/admin/pricing", admin, update, "PUT")).status, 409);
   const stale = await request("/api/orders", customer, wholePlasmid);
   assert.equal(stale.status, 409); assert.equal((await stale.json()).code, "PRICE_CHANGED");
-  const repriced = await fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "X-Pricing-Revision": String(schedule.revision + 1) }, body: JSON.stringify(wholePlasmid) });
+  const repriced = await fetch(origin + "/api/orders", { method: "POST", headers: { cookie: customer, origin, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "X-Pricing-Revision": String(schedule.revision + 1), "X-Pricing-Catalog-Version": "2" }, body: JSON.stringify(wholePlasmid) });
   assert.equal(repriced.status, 201);
   const repricedId = (await repriced.json()).id;
   assert.ok((await (await request(`/orders/${repricedId}`, customer)).text()).includes("$6.50"));
   assert.ok((await (await request(`/orders/${plasmidId}`, customer)).text()).includes("$5.00"), "Historical prices never change");
   assert.equal((await (await submit(order)).json()).id, id, "Retry after repricing returns the original order");
-  assert.equal((await request("/api/orders", customer, { ...oligo, orderName: `SMOKE-OLIGO-AFTER-RATE-CHANGE-${stamp}` })).status, 201, "Unrelated sequencing rate changes do not block a quote-pending Oligo request");
+  const oligoRevisionDb = new PrismaClient();
+  try {
+    for (const [kind, original] of [["STANDARD", oligo], ["MODIFIED", modifiedOligo]] as const) {
+      const refreshedOligo = { ...original, orderName: `SMOKE-OLIGO-${kind}-AFTER-RATE-CHANGE-${stamp}` };
+      const refreshedKey = randomUUID();
+      const beforeRejected = await oligoRevisionDb.order.count();
+      const staleOligo = await request("/api/orders", customer, refreshedOligo, "POST", { "Idempotency-Key": refreshedKey });
+      assert.equal(staleOligo.status, 409, "Every new Oligo order requires review of the current pricing revision, including quote-pending specifications");
+      const latestPrice = await staleOligo.json();
+      assert.equal(latestPrice.code, "PRICE_CHANGED");
+      assert.equal(latestPrice.schedule.revision, schedule.revision + 1);
+      assert.equal(await oligoRevisionDb.order.count(), beforeRejected, "A stale Oligo review does not save an order");
+      const resubmittedOligo = await request("/api/orders", customer, refreshedOligo, "POST", {
+        "Idempotency-Key": refreshedKey,
+        "X-Pricing-Revision": String(latestPrice.schedule.revision),
+        "X-Customer-Pricing-Revision": String(latestPrice.schedule.customerRevision ?? 0),
+        "X-Pricing-Customer-Id": customerId,
+      });
+      assert.equal(resubmittedOligo.status, 201, "Reviewing the returned current price allows the preserved Oligo draft to be submitted");
+      assert.equal(await oligoRevisionDb.order.count(), beforeRejected + 1);
+    }
+    assert.equal((await (await submitOligo(oligo)).json()).id, oligoId, "A saved Oligo retry still returns the original order after repricing");
+  } finally { await oligoRevisionDb.$disconnect(); }
   const pricingPage = await request("/admin/pricing", admin);
   assert.equal(pricingPage.status, 200); assert.ok((await pricingPage.text()).includes("Isolated pricing regression"));
   const filtered = await (await request(`/admin/orders?service=WHOLE_PLASMID&q=${encodeURIComponent(wholePlasmid.orderName)}`, admin)).text();
@@ -581,7 +610,7 @@ async function main() {
   const publicBeforeCustom = await (await request("/api/pricing")).json();
   const savedCustom = await request(customPricingPath, admin, customInput, "PUT");
   assert.equal(savedCustom.status, 200);
-  assert.deepEqual(await savedCustom.json(), { customerId, revision: 1, overrides: customInput.overrides });
+  assert.deepEqual(await savedCustom.json(), { customerId, revision: 1, overrides: customInput.overrides, oligoOverrides: {}, addOnOverrides: {} });
   const staleCustomEdit = await request(customPricingPath, admin, customInput, "PUT");
   assert.equal(staleCustomEdit.status, 409);
   assert.equal((await staleCustomEdit.json()).pricing.revision, 1);
@@ -644,12 +673,13 @@ async function main() {
     assert.equal(((await pricingDb.order.findUniqueOrThrow({ where: { id: otherOrderId } })).pricingSnapshot as { subtotalCents: number }).subtotalCents, 525);
     const customAudit = await pricingDb.customerPricingChange.findFirstOrThrow({ where: { customerId } });
     assert.equal(customAudit.actorId, adminId); assert.equal(customAudit.reason, customInput.reason);
-    assert.deepEqual(customAudit.previousOverrides, {}); assert.deepEqual(customAudit.overrides, customInput.overrides);
+    assert.deepEqual(customAudit.previousOverrides, { format: 2, overrides: {}, oligoOverrides: {}, addOnOverrides: {} });
+    assert.deepEqual(customAudit.overrides, { format: 2, overrides: customInput.overrides, oligoOverrides: {}, addOnOverrides: {} });
     assert.ok((await (await request(profilePath, admin)).text()).includes(customInput.reason), "The customer profile displays its price-change audit");
 
     const resetPrice = await request(customPricingPath, admin, { revision: 1, overrides: {}, reason: "Restore standard rates in isolated test" }, "PUT");
     assert.equal(resetPrice.status, 200);
-    assert.deepEqual(await resetPrice.json(), { customerId, revision: 2, overrides: {} });
+    assert.deepEqual(await resetPrice.json(), { customerId, revision: 2, overrides: {}, oligoOverrides: {}, addOnOverrides: {} });
     const resetSchedule = await (await request("/api/account/pricing", customer)).json();
     assert.equal(resetSchedule.customerRevision, 2);
     assert.equal(resetSchedule.rates["plasmid-plate"], 650);
@@ -710,6 +740,9 @@ async function main() {
   const operationsDb = new PrismaClient();
   try { await runDropboxAttentionSmoke({ base: origin, db: operationsDb, customerCookie: customer, adminCookie: admin, otherCustomerCookie: otherCustomer }); }
   finally { await operationsDb.$disconnect(); }
+  await runPricingCatalogSmoke({ origin, customerCookie: customer, adminCookie: admin, customerId, fulfillment: order.fulfillment });
+  await runLargeSangerSmoke({ origin, customerCookie: customer, adminCookie: admin, customerId, fulfillment: order.fulfillment });
+  await runFragmentSmoke({ origin, customerCookie: customer, adminCookie: admin, customerId, fulfillment: order.fulfillment });
   await runPasswordResetSmoke();
   console.log("PASS: session-bound verification, unverified submission guard, cooldown, invalid/expired/replayed links, preserved return flow, one customer confirmation per order, and zero real customer sends.");
   console.log("PASS: internal-only registration/order preview notifications, deduplication, and zero real sends.");

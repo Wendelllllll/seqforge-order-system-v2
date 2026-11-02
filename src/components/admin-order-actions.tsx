@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { ORDER_STATUSES, STATUS_LABELS } from "@/lib/orders";
+import { isFragmentProductionBlocked } from "@/lib/fragment-analysis";
 import { isOligoProductionBlocked } from "@/lib/oligo-schema";
 
 export function StatusControl({ orderId, currentStatus, service = "SANGER", hasResult, customerEmail, revision, holdReason, holdPreviousStatus }: {
@@ -23,7 +24,7 @@ export function StatusControl({ orderId, currentStatus, service = "SANGER", hasR
   const isHeld = currentStatus === "ON_HOLD";
   const holdAction = isHeld || status === "ON_HOLD";
   const reason = status === "ON_HOLD" ? holdMessage : resolutionMessage;
-  const statusOptions = ORDER_STATUSES.filter(value => !isOligoProductionBlocked(service, value) && !(isHeld && value === "COMPLETED"));
+  const statusOptions = ORDER_STATUSES.filter(value => !isOligoProductionBlocked(service, value) && !isFragmentProductionBlocked(service, value) && !(isHeld && value === "COMPLETED"));
   const hasChange = status !== currentStatus || (status === "ON_HOLD" && holdMessage.trim() !== (holdReason || ""));
   const resumeStatus = holdPreviousStatus && statusOptions.some(value => value === holdPreviousStatus) && holdPreviousStatus !== "ON_HOLD" ? holdPreviousStatus : "RECEIVED";
 
@@ -71,7 +72,7 @@ export function StatusControl({ orderId, currentStatus, service = "SANGER", hasR
         <p className="mt-2 text-xs leading-5 text-slate-600">This message appears in the customer’s order and is emailed to <strong className="break-all">{customerEmail}</strong>. Include only information intended for the customer.</p>
         {status === "ON_HOLD" && <p className="mt-2 text-xs leading-5 text-rose-800">This pauses the order and hides any published result. It does not cancel the order or change its price.</p>}
       </div>}
-      {service === "OLIGO" && <p className="mt-3 text-xs text-amber-900">Quote pending. This version records requests for lab review; production and completion remain unavailable until customer quote approval can be recorded.</p>}
+      {["OLIGO", "FRAGMENT_ANALYSIS"].includes(service) && <p className="mt-3 text-xs text-amber-900">Quote pending. This version records requests for lab review; production and completion remain unavailable until customer quote approval can be recorded.</p>}
       {status === "COMPLETED" && service !== "OLIGO" && <p className="mt-3 text-xs leading-5 text-slate-600">{hasResult ? <>Completing releases the current result to the customer and queues a results-ready email to <strong className="break-all">{customerEmail}</strong>. Check the file before continuing. Each order sends this notification only once; completing it again will not send another.</> : "Upload and check a result file before completing this order."}</p>}
       {currentStatus === "COMPLETED" && status !== "COMPLETED" && <p className="mt-3 text-xs leading-5 text-amber-900">Changing this status hides the result from the customer until the order is completed again.</p>}
       <button type="button" onClick={updateStatus} disabled={loading || !hasChange || (holdAction && !reason.trim()) || (status === "COMPLETED" && !hasResult)} className="button-primary mt-3 w-full justify-center">

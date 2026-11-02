@@ -27,6 +27,7 @@ const env = {
   // Never let synthetic accounts/orders send through the developer's real mailbox.
   INTERNAL_MAIL_MODE: "preview", INTERNAL_MAIL_TO: "staff@example.test", INTERNAL_MAIL_FROM: "sender@example.test",
   CUSTOMER_MAIL_MODE: "preview", CUSTOMER_MAIL_FROM: "sender@example.test", CUSTOMER_MAIL_ALLOWED_RECIPIENTS: "",
+  CONTACT_MAIL_MODE: "off",
   SMTP_HOST: "", SMTP_PORT: "", SMTP_USER: "", SMTP_PASSWORD: "",
 };
 let server;

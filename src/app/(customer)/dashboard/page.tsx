@@ -31,8 +31,13 @@ export default async function DashboardPage() {
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Good day, {session.user.firstName}.</h1>
           <p className="mt-2 text-sm text-slate-500">{session.user.organization} · {session.user.labName}</p>
         </div>
-        <Link href="/orders/new" className="button-primary justify-center"><Plus className="h-4 w-4" /> New order</Link>
       </div>
+
+      <Link href="/orders/new" className="dashboard-new-order" aria-labelledby="dashboard-new-order-title" aria-describedby="dashboard-new-order-services">
+        <span className="dashboard-new-order-icon" aria-hidden="true"><Plus size={30} /></span>
+        <div><h2 id="dashboard-new-order-title">New order</h2><p id="dashboard-new-order-services">Sanger · Whole Plasmid · Oligo</p></div>
+        <span className="dashboard-new-order-arrow" aria-hidden="true"><ArrowRight size={25} /></span>
+      </Link>
 
       <div className="mt-8 grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3">
         {[
@@ -87,8 +92,7 @@ export default async function DashboardPage() {
           <div className="px-6 py-14 text-center">
             <Beaker className="mx-auto h-8 w-8 text-slate-300" />
             <h3 className="mt-4 font-bold text-slate-900">No orders yet</h3>
-            <p className="mt-2 text-sm text-slate-500">Choose a service to start your first order.</p>
-            <Link href="/orders/new" className="button-primary mt-5"><Plus className="h-4 w-4" /> Create first order</Link>
+            <p className="mt-2 text-sm text-slate-500">Your submitted orders will appear here.</p>
           </div>
         )}
       </section>

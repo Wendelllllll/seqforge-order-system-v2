@@ -68,7 +68,7 @@ export async function enqueueResultReady(db: NotificationDb, order: {
   } catch {
     throw new CustomerMailError("MAIL_CONFIG_INVALID");
   }
-  const service = order.service === "WHOLE_PLASMID" ? "Whole Plasmid Sequencing" : "Sanger sequencing";
+  const service = order.service === "FRAGMENT_ANALYSIS" ? "Fragment Analysis" : order.service === "WHOLE_PLASMID" ? "Whole Plasmid Sequencing" : "Sanger sequencing";
   return enqueueCustomerNotification(db, {
     eventKey: `result-ready:${order.id}`, userId: order.user.id, kind: "RESULT_READY", recipient: order.user.email,
     subject: `Results ready for ${order.orderNumber}`,

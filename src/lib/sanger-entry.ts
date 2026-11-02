@@ -1,6 +1,6 @@
 import { importSamples, IMPORT_COLUMNS, readDelimited } from "./order-import";
 import { isLegacyHeader } from "./legacy-order-import";
-import { blankReaction, blankSample, MAX_IMPORT_BYTES, MAX_REACTIONS, type OrderDraft, type SampleDraft } from "./order-intake";
+import { blankReaction, blankSample, importRowLimit, MAX_IMPORT_BYTES, type OrderDraft, type SampleDraft } from "./order-intake";
 
 export function verticalWell(index: number) {
   return `${"ABCDEFGH"[index % 8]}${Math.floor((index % 96) / 8) + 1}`;
@@ -11,7 +11,8 @@ export function newSangerSample(samples: SampleDraft[], container: OrderDraft["c
   const locations = new Set(samples.map(s => container === "Tubes" ? s.tubeLabel.toLowerCase() : `${s.plateLabel.toLowerCase()}/${s.well.toUpperCase()}`));
   while (locations.has(container === "Tubes" ? `tube-${index + 1}` : `plate-${Math.floor(index / 96) + 1}/${verticalWell(index)}`)) index++;
   const sample = blankSample(`S${index + 1}`);
-  while (samples.some(s => s.sampleKey.toLowerCase() === sample.sampleKey.toLowerCase())) sample.sampleKey += "x";
+  const ids = new Set(samples.map(s => s.sampleKey.toLowerCase()));
+  while (ids.has(sample.sampleKey.toLowerCase())) sample.sampleKey += "x";
   return { ...sample, templateType, tubeLabel: container === "Tubes" ? `Tube-${index + 1}` : "", plateLabel: container === "Plate" ? `Plate-${Math.floor(index / 96) + 1}` : "", well: container === "Plate" ? verticalWell(index) : "", reactions: [{ ...blankReaction(), ...(mode !== "Standard" ? { primerSource: "Included in mix" as const, primerName: "Included in mix" } : {}) }] };
 }
 
@@ -31,9 +32,10 @@ for (const column of IMPORT_COLUMNS) sangerColumnAliases[normalize(column)] = co
 const aliases = sangerColumnAliases;
 
 /** Clipboard TSV and simple CSV use the same validation as existing upload files. */
-export function parseSangerPaste(text: string, order: Omit<OrderDraft, "samples">, defaultSource = "Customer supplied", defaultType = "Plasmid DNA", mapped = false) {
+export type PrimerCommaMode = "" | "split" | "keep";
+export function parseSangerPaste(text: string, order: Omit<OrderDraft, "samples">, defaultSource = "Customer supplied", defaultType = "Plasmid DNA", mapped = false, primerCommaMode: PrimerCommaMode = "") {
   const fail = (message: string) => ({ samples: [] as SampleDraft[], errors: [message] });
-  if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES) return fail("Paste up to 1 MB of sample data.");
+  if (new TextEncoder().encode(text).length > (mapped ? 8_000_000 : MAX_IMPORT_BYTES)) return fail(mapped ? "The expanded import is too large. Split it into smaller orders." : "Paste up to 1 MB of sample data.");
   let rows: ReturnType<typeof readDelimited>;
   try { rows = readDelimited(text); } catch (error) { return fail(error instanceof Error ? error.message : "Unable to read spreadsheet."); }
   if (!rows.length) return fail("Paste at least one sample row.");
@@ -42,7 +44,8 @@ export function parseSangerPaste(text: string, order: Omit<OrderDraft, "samples"
   const hasHeader = rows[0].cells.some(cell => aliases[normalize(cell)] === "sampleName");
   const columns = hasHeader ? rows.shift()!.cells.map(cell => aliases[normalize(cell)] || "") : ["sampleName", "templateLength", "concentration", "primerName"];
   if (columns.some(c => !c) || new Set(columns).size !== columns.length) return fail("Use unique supported column headers, or paste four columns without headers: Sample name, Length (bp), Concentration, Primer.");
-  if (!rows.length || rows.length > MAX_REACTIONS) return fail(`Paste between 1 and ${MAX_REACTIONS} rows.`);
+  const rowLimit = importRowLimit(order.service);
+  if (!rows.length || rows.length > rowLimit) return fail(`Paste between 1 and ${rowLimit} rows.`);
   const converted: string[][] = [[...IMPORT_COLUMNS]];
   const locations = new Map<string, string>();
   for (const row of rows) {
@@ -62,10 +65,13 @@ export function parseSangerPaste(text: string, order: Omit<OrderDraft, "samples"
     const key = values.sampleKey || locations.get(location) || `S${locations.size + 1}`;
     locations.set(location, key);
     sample.sampleKey = key;
-    const primers = (values.primerName || (order.submissionMode !== "Standard" ? "Included in mix" : "")).split(";").map(p => p.trim());
+    const primerText = values.primerName || (order.submissionMode !== "Standard" ? "Included in mix" : "");
+    if (primerText.includes(",") && !primerCommaMode) return fail(`Row ${row.line}: the Primer name cell contains a comma. Confirm whether commas separate primers or belong to one primer name, then preview again.`);
+    const primers = primerText.split(primerCommaMode === "split" ? /[;,]/ : /;/).map(p => p.trim());
     if (order.submissionMode !== "Standard" && primers.length > 1) return fail(`Row ${row.line}: ${order.submissionMode} accepts one reaction per tube or well. Use a separate tube or well for each primer.`);
     for (const primerName of primers) {
-      const sourceAliases: Record<string, string> = { customer: "Customer supplied", supplied: "Customer supplied", universal: "SeqForge universal primer", seqforge: "SeqForge universal primer" };
+      if (converted.length > rowLimit) return fail(`This order supports up to ${rowLimit} reaction rows. Reduce the number of primers or split the order.`);
+      const sourceAliases: Record<string, string> = { customer: "Customer supplied", supplied: "Customer supplied", customersupplied: "Customer supplied", universal: "SeqForge universal primer", seqforge: "SeqForge universal primer", seqforgeuniversalprimer: "SeqForge universal primer", stored: "Stored at SeqForge", storedatseqforge: "Stored at SeqForge" };
       const source = values.primerSource || defaultSource;
       if (order.submissionMode !== "Standard" && values.primerSource && values.primerSource !== "Included in mix") return fail(`Row ${row.line}: ${order.submissionMode} does not accept separate primer supplies. Remove the separate primer source.`);
       const reaction = { ...blankReaction(), primerName, primerSource: order.submissionMode === "Standard" ? sourceAliases[normalize(source)] || source : "Included in mix", primerConcentration: values.primerConcentration || "", specialProtocol: values.specialProtocol || "None known" };
@@ -76,14 +82,16 @@ export function parseSangerPaste(text: string, order: Omit<OrderDraft, "samples"
       converted.push(IMPORT_COLUMNS.map(key => String(flattened[key])));
     }
   }
-  return importSamples(converted.map(row => row.map(cell => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n"), order);
+  return importSamples(converted.map(row => row.map(cell => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n"), order, "require-single", true);
 }
 
 export function appendSangerSamples(current: SampleDraft[], incoming: SampleDraft[]) {
   const result = [...current];
+  const ids = new Set(current.map(sample => sample.sampleKey.toLowerCase()));
   for (const sample of incoming) {
     let key = sample.sampleKey;
-    while (result.some(s => s.sampleKey.toLowerCase() === key.toLowerCase())) key += "x";
+    while (ids.has(key.toLowerCase())) key += "x";
+    ids.add(key.toLowerCase());
     result.push({ ...sample, sampleKey: key });
   }
   return result;

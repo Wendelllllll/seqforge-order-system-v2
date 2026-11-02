@@ -1,28 +1,38 @@
 import { z } from "zod";
 import { blankDefaults, orderDefaultsSchema } from "./order-defaults";
 import { hasOligoModifications, MAX_OLIGOS, OLIGO_FORMATS, oligoSchema } from "./oligo-schema";
+import { fragmentFieldsSchema, fragmentSettingsSchema, FRAGMENT_MAX_SAMPLES } from "./fragment-analysis";
 
 export const PRIORITIES = ["Standard", "Same day requested"] as const;
 export const CONTAINERS = ["Tubes", "Plate"] as const;
-export const MODES = ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid", "Oligo standard", "Oligo modified"] as const;
+export const MODES = ["Standard", "Pre-mixed", "Ready to load", "Whole plasmid", "Oligo standard", "Oligo modified", "Fragment analysis"] as const;
 export const TEMPLATES = ["Plasmid DNA", "PCR product", "Purified PCR product", "BAC", "Genomic DNA", "Other"] as const;
 export const PREPARATIONS = ["None requested", "Miniprep requested", "PCR cleanup requested"] as const;
 export const PROTOCOLS = ["None known", "GC-rich", "RNAi", "PolyA", "Dinucleotide repeat"] as const;
 export const SOURCES = ["Customer supplied", "SeqForge universal primer", "Stored at SeqForge", "SeqForge synthesized primer", "Included in mix"] as const;
+// Legacy sources remain readable in saved orders and drafts, but cannot be selected for new Sanger orders.
+export const SANGER_PRIMER_SOURCES = ["Customer supplied", "SeqForge universal primer", "Stored at SeqForge"] as const;
 export const UNIVERSAL_PRIMERS = ["AOX1-For", "AOX1-Rev", "BGHrev", "CMV-F", "DON1-F", "DON2-R", "EGFP-C", "EGFP-N", "GLprimer1", "GLprimer2", "M13F", "M13F-20", "M13R", "pBADF", "pBADR", "pGEX3", "pGEX5", "pTriplEx3", "pTriplEx5", "SP6", "T3", "T7", "T7term"] as const;
 export const PURIFICATIONS = ["Desalted", "Cartridge", "HPLC", "PAGE"] as const;
 export const SCALES = ["25 nmol", "100 nmol", "250 nmol", "1 umol", "10 umol"] as const;
 export const MAX_REACTIONS = 250;
+export const MAX_SANGER_SAMPLES = 1536;
+export const MAX_SANGER_REACTIONS = 3072;
+export const sampleLimit = (service: string = "SANGER") => service === "FRAGMENT_ANALYSIS" ? FRAGMENT_MAX_SAMPLES : service === "SANGER" ? MAX_SANGER_SAMPLES : MAX_REACTIONS;
+export const reactionLimit = (service: string = "SANGER") => service === "SANGER" ? MAX_SANGER_REACTIONS : MAX_REACTIONS;
+export const importRowLimit = (service: string = "SANGER") => service === "SANGER" ? MAX_SANGER_REACTIONS : sampleLimit(service);
 export const MAX_IMPORT_BYTES = 1_000_000;
 
 const shortText = z.string().trim().max(100);
+export const addOnIdsSchema = z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)).max(30).refine(ids => new Set(ids).size === ids.length, "Select each additional service only once.").optional();
 const positiveNumber = z.string().trim().max(30).refine(
   (value) => value === "" || (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0),
   "Enter a positive number without units, or leave blank if unknown.",
 );
 const wholeNumber = positiveNumber.refine((value) => value === "" || Number.isSafeInteger(Number(value)), "Enter a whole number of base pairs.");
 
-export const reactionSchema = z.object({
+export const reactionFieldsSchema = z.object({
+  addOnIds: addOnIdsSchema,
   primerSource: z.enum(SOURCES),
   primerName: shortText.min(1, "Enter a primer name."),
   primerConcentration: positiveNumber,
@@ -34,7 +44,10 @@ export const reactionSchema = z.object({
   modification3: shortText,
   modificationInternal: shortText,
   specialProtocol: z.enum(PROTOCOLS),
-}).superRefine((reaction, ctx) => {
+});
+export const reactionSchema = reactionFieldsSchema.transform(reaction => ({ ...reaction, primerName: reaction.primerSource === "SeqForge universal primer"
+  ? UNIVERSAL_PRIMERS.find(name => name.toLowerCase() === reaction.primerName.toLowerCase()) || reaction.primerName
+  : reaction.primerName })).superRefine((reaction, ctx) => {
   if (reaction.primerSource === "SeqForge universal primer" && !(UNIVERSAL_PRIMERS as readonly string[]).includes(reaction.primerName)) {
     ctx.addIssue({ code: "custom", path: ["primerName"], message: "Choose a primer from the SeqForge catalogue." });
   }
@@ -47,6 +60,7 @@ export const reactionSchema = z.object({
 });
 
 export const sampleSchema = z.object({
+  addOnIds: addOnIdsSchema,
   sampleKey: shortText.min(1, "Enter a sample ID."),
   sampleName: shortText.min(1, "Enter a DNA name."),
   tubeLabel: shortText,
@@ -57,11 +71,13 @@ export const sampleSchema = z.object({
   concentration: positiveNumber,
   preparation: z.enum(PREPARATIONS),
   notes: z.string().trim().max(500),
-  reactions: z.array(reactionSchema).max(MAX_REACTIONS),
+  reactions: z.array(reactionSchema).max(MAX_SANGER_REACTIONS),
 });
 
 export const orderSchema = z.object({
-  service: z.enum(["SANGER", "WHOLE_PLASMID", "OLIGO"]).default("SANGER"),
+  addOnIds: addOnIdsSchema,
+  service: z.enum(["SANGER", "WHOLE_PLASMID", "OLIGO", "FRAGMENT_ANALYSIS"]).default("SANGER"),
+  fragmentAnalysis: fragmentFieldsSchema.optional(),
   fulfillment: orderDefaultsSchema,
   sharedResultEmails: z.array(z.string().trim().toLowerCase().email().max(254)).max(20).optional(),
   orderName: z.string().trim().max(120).optional().transform(value => value || "Untitled order"),
@@ -70,7 +86,7 @@ export const orderSchema = z.object({
   priority: z.enum(PRIORITIES),
   container: z.enum(CONTAINERS),
   submissionMode: z.enum(MODES),
-  samples: z.array(sampleSchema).max(MAX_REACTIONS),
+  samples: z.array(sampleSchema).max(MAX_SANGER_SAMPLES),
   oligos: z.array(oligoSchema).max(MAX_OLIGOS).optional(),
   oligoShippingAddress: z.string().trim().max(1000).optional(),
   oligoFormat: z.enum(OLIGO_FORMATS).optional(),
@@ -78,6 +94,14 @@ export const orderSchema = z.object({
   if (order.submissionMode === "Ready to load") ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "This submission type is no longer offered. Choose Standard or Pre-mixed." });
   const plasmid = order.service === "WHOLE_PLASMID";
   const oligo = order.service === "OLIGO";
+  const fragment = order.service === "FRAGMENT_ANALYSIS";
+  if (fragment !== (order.submissionMode === "Fragment analysis")) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
+  if (fragment) {
+    const settings = fragmentSettingsSchema.safeParse(order.fragmentAnalysis);
+    if (!settings.success) for (const issue of settings.error.issues) ctx.addIssue({ code: "custom", path: ["fragmentAnalysis", ...issue.path], message: issue.message });
+    if (order.priority !== "Standard") ctx.addIssue({ code: "custom", path: ["priority"], message: "Fragment Analysis turnaround must be confirmed by the laboratory." });
+  } else if (order.fragmentAnalysis) ctx.addIssue({ code: "custom", path: ["fragmentAnalysis"], message: "Fragment Analysis settings belong to a Fragment Analysis order." });
+  if (order.samples.length > sampleLimit(order.service)) ctx.addIssue({ code: "custom", path: ["samples"], message: `This service supports at most ${sampleLimit(order.service)} physical samples per order.` });
   if (plasmid !== (order.submissionMode === "Whole plasmid")) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
   if (oligo !== ["Oligo standard", "Oligo modified"].includes(order.submissionMode)) ctx.addIssue({ code: "custom", path: ["submissionMode"], message: "Submission type does not match the selected service." });
   const details = order.fulfillment;
@@ -109,7 +133,7 @@ export const orderSchema = z.object({
   if (!order.samples.length) ctx.addIssue({ code: "custom", path: ["samples"], message: "Add at least one sample." });
   const ids = new Set<string>();
   const locations = new Set<string>();
-  if (reactionCount(order.samples) > MAX_REACTIONS) ctx.addIssue({ code: "custom", path: ["samples"], message: `This demo supports at most ${MAX_REACTIONS} reactions per order.` });
+  if (reactionCount(order.samples) > reactionLimit(order.service)) ctx.addIssue({ code: "custom", path: ["samples"], message: `This service supports at most ${reactionLimit(order.service)} reactions per order.` });
   order.samples.forEach((sample, i) => {
     const issue = (field: string, message: string) => ctx.addIssue({ code: "custom", path: ["samples", i, field], message });
     const key = sample.sampleKey.toLowerCase();
@@ -129,12 +153,19 @@ export const orderSchema = z.object({
       if (sample.reactions.length) issue("reactions", "Whole plasmid samples do not use Sanger primers or reactions.");
       if (sample.templateType !== "Plasmid DNA") issue("templateType", "Choose purified plasmid DNA for Whole Plasmid Sequencing.");
       if (sample.preparation !== "None requested") issue("preparation", "Submit purified plasmid DNA; preparation services are not part of this order.");
+    } else if (fragment) {
+      if (sample.reactions.length) issue("reactions", "Fragment Analysis does not use Sanger sequencing primers.");
+      if (sample.templateType !== "PCR product" || sample.preparation !== "None requested") issue("templateType", "This service accepts fluorescently labeled PCR products for laboratory review.");
+      if (sample.templateLength || sample.concentration) issue("templateLength", "Enter the expected fragment size range in the order's analysis settings; use notes for other measurements.");
     } else if (!sample.reactions.length) issue("reactions", "Add at least one reaction per sample.");
-    if (!plasmid && order.submissionMode !== "Standard") {
+    if (!plasmid && !fragment && order.submissionMode !== "Standard") {
       if (sample.reactions.length !== 1) issue("reactions", "Each premixed tube or well represents one reaction. Use separate physical samples for additional primers.");
       if (sample.preparation !== "None requested") issue("preparation", "Preparation requests require Standard submission.");
     }
     sample.reactions.forEach((reaction, j) => {
+      if (order.service === "SANGER" && reaction.primerSource === "SeqForge synthesized primer") {
+        ctx.addIssue({ code: "custom", path: ["samples", i, "reactions", j, "primerSource"], message: "Choose Customer supplied, Universal or Stored at SeqForge. Primer synthesis is ordered separately through Oligo synthesis." });
+      }
       if ((order.submissionMode === "Standard") === (reaction.primerSource === "Included in mix")) {
         ctx.addIssue({ code: "custom", path: ["samples", i, "reactions", j, "primerSource"], message: order.submissionMode === "Standard" ? "Choose a separate primer source for Standard submission." : "Choose Included in mix for this submission mode." });
       }
@@ -157,7 +188,32 @@ export function blankOrder(): OrderDraft {
 export function reactionCount(samples: { reactions: unknown[] }[]) {
   return samples.reduce((sum, sample) => sum + sample.reactions.length, 0);
 }
+const FIELD_LABELS: Record<string, string> = {
+  service: "Service", submissionMode: "Submission type", container: "Tubes or plates", priority: "Priority",
+  orderName: "Order name", poNumber: "PO number", specialInstructions: "Special instructions", sharedResultEmails: "Shared result email",
+  deliveryMethod: "Sample delivery method", dropboxId: "Dropbox location", dropbox: "Dropbox location", pickupLocation: "Lab pickup address",
+  pickupInstructions: "Pickup instructions", contactName: "Contact name", contactPhone: "Contact phone", piName: "PI / principal investigator",
+  billingOrganization: "Billing organization", billingContactName: "Billing contact name", billingEmail: "Billing email", billingAddress: "Billing address", paymentMethod: "Payment method",
+  sampleKey: "Sample ID", sampleName: "DNA name", tubeLabel: "Tube label", plateLabel: "Plate label", well: "Well position",
+  templateType: "DNA type", templateLength: "DNA length (bp)", concentration: "DNA concentration (ng/µL)", preparation: "Sample preparation", notes: "Sample notes",
+  primerSource: "Primer source", primerName: "Primer name", primerConcentration: "Primer concentration (pmol/µL)", storedPrimerReference: "Stored primer reference",
+  primerSequence: "Primer sequence", purification: "Purification", synthesisScale: "Synthesis scale", modification5: "5′ modification", modification3: "3′ modification", modificationInternal: "Internal modification", specialProtocol: "Special protocol",
+  addOnIds: "Additional services", samples: "Samples", reactions: "Primers", fulfillment: "Delivery and billing", oligos: "Oligos", name: "Oligo name", sequence: "DNA sequence",
+  oligoShippingAddress: "Oligo delivery address", oligoFormat: "Oligo delivery format",
+  fragmentAnalysis: "Fragment Analysis settings", dyes: "Fluorescent dyes", minSize: "Minimum fragment size (bp)", maxSize: "Maximum fragment size (bp)", sizeStandard: "Requested size standard", resultRequest: "Requested results",
+};
+export function orderFieldLabel(field: string) {
+  return FIELD_LABELS[field] || field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, letter => letter.toUpperCase());
+}
 export function issueLabel(issue: { path: PropertyKey[]; message: string }) {
-  const path = issue.path.map((part) => typeof part === "number" ? part + 1 : String(part)).join(" · ");
-  return `${path}: ${issue.message}`;
+  const labels: string[] = [];
+  for (let i = 0; i < issue.path.length; i++) {
+    const part = issue.path[i];
+    if (part === "fulfillment") continue;
+    if (["samples", "reactions", "oligos"].includes(String(part)) && typeof issue.path[i + 1] === "number") {
+      labels.push(`${part === "samples" ? "Sample" : part === "reactions" ? "Primer" : "Oligo"} ${Number(issue.path[++i]) + 1}`);
+    } else if (typeof part === "number") labels.push(String(part + 1));
+    else labels.push(orderFieldLabel(String(part)));
+  }
+  return `${labels.length ? `${labels.join(" · ")}: ` : ""}${issue.message}`;
 }

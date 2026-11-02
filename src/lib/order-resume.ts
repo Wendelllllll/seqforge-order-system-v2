@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_REACTIONS, orderSchema, reactionCount, reactionSchema, sampleSchema, type OrderDraft } from "./order-intake";
+import { importRowLimit, MAX_REACTIONS, MAX_SANGER_REACTIONS, MAX_SANGER_SAMPLES, orderSchema, reactionCount, reactionLimit, reactionFieldsSchema, sampleLimit, sampleSchema, type OrderDraft } from "./order-intake";
 import { orderDefaultsSchema } from "./order-defaults";
 import { orderServiceUrl, ORDER_SERVICES } from "./order-services";
 import { savedRateScheduleSchema } from "./rate-schedule";
@@ -9,24 +9,29 @@ import { dropboxOrderUrl } from "./dropboxes";
 // Drafts permit unfinished text. Final submission still uses the strict orderSchema.
 const text = z.string().max(10000);
 const oligo = z.object({ ...oligoSchema.shape, name: text, sequence: text });
-const reaction = z.object({ ...reactionSchema.shape, primerName: text, primerConcentration: text, primerSequence: text });
-const sample = z.object({ ...sampleSchema.shape, sampleName: text, templateLength: text, concentration: text, reactions: z.array(reaction).max(MAX_REACTIONS) });
-const draft = z.object({ ...orderSchema.shape, orderName: text, fulfillment: z.object({ ...orderDefaultsSchema.shape, billingEmail: text }), samples: z.array(sample).max(MAX_REACTIONS), oligos: z.array(oligo).max(MAX_REACTIONS).optional() })
-  .refine(value => reactionCount(value.samples) <= MAX_REACTIONS);
+const reaction = z.object({ ...reactionFieldsSchema.shape, primerName: text, primerConcentration: text, primerSequence: text });
+const sample = z.object({ ...sampleSchema.shape, sampleName: text, templateLength: text, concentration: text, reactions: z.array(reaction).max(MAX_SANGER_REACTIONS) });
+const draft = z.object({ ...orderSchema.shape, orderName: text, fulfillment: z.object({ ...orderDefaultsSchema.shape, billingEmail: text }), samples: z.array(sample).max(MAX_SANGER_SAMPLES), oligos: z.array(oligo).max(MAX_REACTIONS).optional() })
+  .refine(value => value.samples.length <= sampleLimit(value.service) && reactionCount(value.samples) <= reactionLimit(value.service));
 
 export const savedOrderSchema = z.object({
   version: z.literal(1), savedAt: z.number(), ownerId: z.string().nullable(), draft,
   step: z.enum(["samples", "details"]).default("samples"), review: z.boolean().default(false),
   shareText: z.string().max(5200).default(""), entryMethod: z.enum(["manual", "paste", "import"]).default("manual"),
   bulkText: z.string().max(1_000_000).default(""),
-  mappingSheet: z.object({ rows: z.array(z.object({ cells: z.array(z.string()).max(100), line: z.number() })).max(251), hasHeader: z.boolean(), columns: z.array(z.string()).max(100) }).nullable().default(null),
-  pasteSource: z.enum(["", "Customer supplied", "SeqForge universal primer", "column", "primer-columns", "Included in mix"]).default(""),
-  pendingImport: z.array(sample).max(MAX_REACTIONS).nullable().default(null),
+  mappingSheet: z.object({ rows: z.array(z.object({ cells: z.array(z.string()).max(100), line: z.number() })).max(MAX_SANGER_REACTIONS + 1), hasHeader: z.boolean(), columns: z.array(z.string()).max(100), primerCommaMode: z.enum(["", "split", "keep"]).optional() }).nullable().default(null),
+  pasteSource: z.enum(["", "Customer supplied", "SeqForge universal primer", "Stored at SeqForge", "column", "primer-columns", "Included in mix"]).default(""),
+  pendingImport: z.array(sample).max(MAX_SANGER_SAMPLES).nullable().default(null),
   oligoPendingImport: z.array(oligo).max(MAX_REACTIONS).nullable().optional(),
-  imported: z.boolean().default(false), sampleCount: z.number().int().min(1).max(MAX_REACTIONS).nullable().default(1),
+  imported: z.boolean().default(false), sampleCount: z.number().int().min(1).max(MAX_SANGER_SAMPLES).nullable().default(1),
   submissionKey: z.union([z.literal(""), z.string().uuid()]).default(""),
   pricingSchedule: savedRateScheduleSchema.optional(),
   priceNotice: z.string().max(1000).optional(),
+}).superRefine((value, ctx) => {
+  const service = value.draft.service;
+  if (value.pendingImport && (value.pendingImport.length > sampleLimit(service) || reactionCount(value.pendingImport) > reactionLimit(service))) ctx.addIssue({ code: "custom", path: ["pendingImport"], message: "The pending import exceeds this service's sample or reaction limit." });
+  if (value.mappingSheet && value.mappingSheet.rows.length > importRowLimit(service) + (value.mappingSheet.hasHeader ? 1 : 0)) ctx.addIssue({ code: "custom", path: ["mappingSheet"], message: "The mapped spreadsheet exceeds this service's row limit." });
+  if (value.sampleCount !== null && value.sampleCount > sampleLimit(service)) ctx.addIssue({ code: "custom", path: ["sampleCount"], message: "The draft exceeds this service's sample limit." });
 });
 export type SavedOrder = z.infer<typeof savedOrderSchema>;
 export type OrderResumeState = Omit<SavedOrder, "version" | "savedAt" | "ownerId">;
@@ -38,11 +43,13 @@ export function hasOrderDraftChanges(state: OrderResumeState, initial: OrderResu
 export const orderDraftKey = (mode: OrderDraft["submissionMode"]) => `seqforge:order-draft:v1:${mode}`;
 export const persistentOrderDraftKey = (mode: OrderDraft["submissionMode"], ownerId: string | null) => `seqforge:order-draft:v2:${ownerId ? `user:${ownerId}` : "guest"}:${mode}`;
 export const ORDER_DRAFT_TTL = 30 * 24 * 60 * 60 * 1000;
+export const MAX_SAVED_DRAFT_CHARS = 8_000_000;
 
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export function persistOrderDraft(storage: DraftStorage, mode: OrderDraft["submissionMode"], ownerId: string | null, state: OrderResumeState, now = Date.now()) {
   const raw = JSON.stringify({ ...state, version: 1, savedAt: now, ownerId });
+  if (raw.length > MAX_SAVED_DRAFT_CHARS) throw new Error("This draft is too large to save safely. Reduce lengthy notes or pending spreadsheet data before leaving this page.");
   const key = persistentOrderDraftKey(mode, ownerId);
   storage.setItem(key, raw);
   if (storage.getItem(key) !== raw) throw new Error("Draft not saved");
@@ -64,13 +71,14 @@ export function restoreOrderDraft(storage: DraftStorage, tabStorage: DraftStorag
 }
 
 export function readSavedOrder(raw: string | null, mode: OrderDraft["submissionMode"], ownerId: string | null, now = Date.now()): SavedOrder | null {
-  if (!raw || raw.length > 3_000_000) return null;
+  if (!raw || raw.length > MAX_SAVED_DRAFT_CHARS) return null;
   try {
     const parsed = savedOrderSchema.safeParse(JSON.parse(raw));
     if (!parsed.success) return null;
     const saved = parsed.data;
     if (saved.draft.submissionMode !== mode || now - saved.savedAt > ORDER_DRAFT_TTL || saved.savedAt > now + 60_000) return null;
     if ((mode === "Whole plasmid") !== (saved.draft.service === "WHOLE_PLASMID")) return null;
+    if ((mode === "Fragment analysis") !== (saved.draft.service === "FRAGMENT_ANALYSIS")) return null;
     if (mode.startsWith("Oligo ") !== (saved.draft.service === "OLIGO")) return null;
     // A guest draft can become a signed-in draft. Never restore another account's draft.
     if (saved.ownerId !== null && saved.ownerId !== ownerId) return null;
@@ -79,6 +87,7 @@ export function readSavedOrder(raw: string | null, mode: OrderDraft["submissionM
 }
 
 export function orderReturnPath(mode: OrderDraft["submissionMode"]) {
+  if (mode === "Fragment analysis") return orderServiceUrl("fragment-analysis");
   if (mode === "Ready to load") return "/orders/new?service=sanger&retired=ready-to-load";
   if (mode === "Whole plasmid") return orderServiceUrl("whole-plasmid");
   if (mode === "Oligo standard" || mode === "Oligo modified") return orderServiceUrl("oligo", mode === "Oligo modified" ? "modified" : "standard");

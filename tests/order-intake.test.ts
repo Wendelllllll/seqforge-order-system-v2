@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blankOrder, blankReaction, blankSample, orderSchema, reactionCount } from "../src/lib/order-intake";
+import { blankOrder, blankReaction, blankSample, importRowLimit, MAX_REACTIONS, MAX_SANGER_REACTIONS, MAX_SANGER_SAMPLES, orderSchema, reactionCount, reactionSchema, reactionLimit, sampleLimit } from "../src/lib/order-intake";
 import { importSamples, readDelimited, templateCsv } from "../src/lib/order-import";
 
 function validOrder() {
@@ -46,7 +46,7 @@ test("requires real container labels, unique sample IDs and unique canonical wel
   order.container = "Tubes";
   assert.equal(orderSchema.safeParse(order).success, false);
 });
-test("stored and synthesized primers require appropriate details", () => {
+test("stored primers require references; historical synthesis remains readable but cannot be newly ordered", () => {
   const order = validOrder(), r = order.samples[0].reactions[0];
   r.primerSource = "Stored at SeqForge";
   assert.equal(orderSchema.safeParse(order).success, false);
@@ -54,9 +54,12 @@ test("stored and synthesized primers require appropriate details", () => {
   assert.equal(orderSchema.safeParse(order).success, true);
   r.primerSource = "SeqForge synthesized primer";
   r.primerSequence = "acgtnry";
-  assert.equal(orderSchema.parse(order).samples[0].reactions[0].primerSequence, "ACGTNRY");
+  assert.equal(reactionSchema.parse(r).primerSequence, "ACGTNRY");
+  const rejected = orderSchema.safeParse(order);
+  assert.equal(rejected.success, false);
+  if (!rejected.success) assert.ok(rejected.error.issues.some(issue => issue.path.at(-1) === "primerSource" && issue.message.includes("ordered separately")));
   for (const sequence of ["", "ACGT U", "ACGT-5mod"]) {
-    r.primerSequence = sequence; assert.equal(orderSchema.safeParse(order).success, false);
+    r.primerSequence = sequence; assert.equal(reactionSchema.safeParse(r).success, false);
   }
 });
 test("complete retired submissions are rejected even when their sample and billing details are valid", () => {
@@ -87,12 +90,37 @@ test("premixed submissions use one included-primer reaction per location", () =>
     assert.equal(orderSchema.safeParse(order).success, false);
   }
 });
-test("demo reaction cap applies across all samples", () => {
+test("Sanger reaction cap applies across all samples without changing other service caps", () => {
   const order = validOrder();
-  order.samples[0].reactions = Array.from({ length: 250 }, () => structuredClone(order.samples[0].reactions[0]));
+  order.samples[0].reactions = Array.from({ length: MAX_SANGER_REACTIONS }, () => structuredClone(order.samples[0].reactions[0]));
   assert.equal(orderSchema.safeParse(order).success, true);
   order.samples.push({ ...blankSample("S2"), sampleName: "Second", tubeLabel: "Tube-2", reactions: [order.samples[0].reactions[0]] });
   assert.equal(orderSchema.safeParse(order).success, false);
+  assert.equal(sampleLimit(), MAX_SANGER_SAMPLES);
+  assert.equal(reactionLimit(), MAX_SANGER_REACTIONS);
+  assert.equal(importRowLimit(), MAX_SANGER_REACTIONS);
+  for (const service of ["WHOLE_PLASMID", "OLIGO"]) {
+    assert.equal(sampleLimit(service), MAX_REACTIONS); assert.equal(reactionLimit(service), MAX_REACTIONS); assert.equal(importRowLimit(service), MAX_REACTIONS);
+  }
+});
+
+test("eight complete Sanger plates with two primers validate and limits distinguish samples from reactions", () => {
+  const order = validOrder(); order.container = "Plate";
+  const sample = order.samples[0];
+  const makeSamples = (count: number) => Array.from({ length: count }, (_, i) => ({ ...sample, sampleKey: `S${i + 1}`, sampleName: `DNA-${i + 1}`, tubeLabel: "", plateLabel: `Plate-${Math.floor(i / 96) + 1}`, well: `${"ABCDEFGH"[i % 8]}${Math.floor((i % 96) / 8) + 1}`, reactions: [sample.reactions[0], { ...sample.reactions[0], primerName: "M13R" }] }));
+  order.samples = makeSamples(768);
+  const parsed = orderSchema.parse(order);
+  assert.equal(parsed.samples.length, 768); assert.equal(reactionCount(parsed.samples), 1536);
+  assert.equal(new Set(parsed.samples.map(item => item.plateLabel)).size, 8);
+  assert.equal(parsed.samples[767].well, "H12");
+  order.samples = makeSamples(MAX_SANGER_SAMPLES);
+  assert.equal(orderSchema.safeParse(order).success, true);
+  order.samples = makeSamples(MAX_SANGER_SAMPLES + 1).map(item => ({ ...item, reactions: [item.reactions[0]] }));
+  assert.equal(orderSchema.safeParse(order).success, false, "Physical-sample cap applies even below the reaction cap");
+  const plasmid = { ...order, service: "WHOLE_PLASMID" as const, submissionMode: "Whole plasmid" as const, samples: makeSamples(250).map(item => ({ ...item, reactions: [] })) };
+  assert.equal(orderSchema.safeParse(plasmid).success, true);
+  plasmid.samples = makeSamples(251).map(item => ({ ...item, reactions: [] }));
+  assert.equal(orderSchema.safeParse(plasmid).success, false);
 });
 test("CSV reader supports BOM, quoted commas, escaped quotes, multiline fields and TSV", () => {
   assert.deepEqual(readDelimited('\uFEFFid,notes\r\nS1,"a,b ""quote""\r\nnext"\r\n'), [
@@ -150,7 +178,7 @@ test("V4 requires pickup and billing details and rejects unavailable payment met
 
 test("V4 CSV preserves detailed sample and primer data with incomplete order details", () => {
   const header = "sampleKey,sampleName,plateLabel,well,templateType,templateLength,concentration,preparation,notes,primerSource,primerName,primerConcentration,storedPrimerReference,primerSequence,purification,synthesisScale,modification5,modification3,modificationInternal,specialProtocol";
-  const row = 'S1,Clone,P1,a01,Plasmid DNA,3200,100,None requested,"notes, kept",SeqForge synthesized primer,Custom-F,,,acgtn,HPLC,100 nmol,5mod,3mod,internal,GC-rich';
+  const row = 'S1,Clone,P1,a01,Plasmid DNA,3200,100,None requested,"notes, kept",Stored at SeqForge,Custom-F,,REF-123,,Desalted,25 nmol,,,,GC-rich';
   const result = importSamples(header + "\n" + row, { ...blankOrder(), container: "Plate" });
   assert.deepEqual(result.errors, []);
   assert.equal(result.samples[0].well, "A1");
@@ -158,9 +186,7 @@ test("V4 CSV preserves detailed sample and primer data with incomplete order det
   assert.equal(result.samples[0].templateLength, "3200");
   assert.equal(result.samples[0].concentration, "100");
   const reaction = result.samples[0].reactions[0];
-  assert.equal(reaction.primerSequence, "ACGTN");
-  assert.equal(reaction.purification, "HPLC");
-  assert.equal(reaction.modificationInternal, "internal");
+  assert.equal(reaction.storedPrimerReference, "REF-123");
   assert.equal(reaction.specialProtocol, "GC-rich");
   assert.ok(!readDelimited(templateCsv("Tubes", "Standard"))[0].cells.includes("well"));
   assert.ok(!readDelimited(templateCsv("Plate", "Standard"))[0].cells.includes("tubeLabel"));
@@ -196,7 +222,11 @@ test("bulk plate entry preserves existing work and rejects duplicate plates and 
   assert.equal(order.samples.length, 192);
   assert.deepEqual(order.samples.slice(0, 96), original);
   assert.equal(new Set(order.samples.map(s => s.sampleKey)).size, 192);
-  assert.throws(() => addPlate(order, { ...options, label: "P3" }), /250/);
+  order.samples = addPlate(order, { ...options, label: "P3" });
+  assert.equal(order.samples.length, 288);
+  order.samples = order.samples.map((sample, index) => ({ ...sample, reactions: Array.from({ length: index < 192 ? 11 : 10 }, () => sample.reactions[0]) }));
+  assert.equal(reactionCount(order.samples), MAX_SANGER_REACTIONS);
+  assert.throws(() => addPlate(order, { ...options, label: "P4" }), /3072/);
   assert.throws(() => addPlate(order, { ...options, count: 0 }), /1–96/);
 });
 
@@ -279,29 +309,39 @@ test("legacy template handles tube labels, blank premix primers and original com
 });
 
 
-test("simple templates preserve the legacy format and span complete plates", async () => {
+test("customer templates match the container and round-trip through column confirmation", async () => {
   const { simpleOrderTemplate } = await import("../src/lib/simple-order-template");
+  const { inspectSangerSheet, parseMappedSanger } = await import("../src/lib/sanger-column-mapping");
   for (const container of ["Tubes", "Plate"] as const) {
     for (const submissionMode of ["Standard", "Pre-mixed"] as const) {
       const order = { ...validOrder(), container, submissionMode };
-      const csv = simpleOrderTemplate(container, 192);
-      assert.ok(importSamples(csv, order).errors.length > 0, "blank template must not submit as real samples");
+      const csv = simpleOrderTemplate(container, 192, submissionMode);
+      const source = submissionMode === "Standard" ? "SeqForge universal primer" : "Included in mix";
+      assert.ok(parseMappedSanger(inspectSangerSheet(csv, container), order, source).errors.length > 0, "blank template must not submit as real samples");
       const rows = readDelimited(csv);
+      const headers = rows[0].cells;
+      assert.equal(headers.includes("Well"), container === "Plate");
+      assert.equal(headers.includes("Plate label"), container === "Plate");
+      assert.equal(headers.includes("Tube label"), container === "Tubes");
+      assert.equal(headers.includes("wellID"), false);
+      assert.equal(headers.includes("My primers"), false);
       const populated = rows.map((row, i) => {
-        if (i) { row.cells[3] = `DNA ${i}`; if (submissionMode === "Standard") row.cells[9] = "M13F"; }
+        if (i) { row.cells[headers.indexOf("Sample name")] = `DNA ${i}`; if (submissionMode === "Standard") row.cells[headers.indexOf("Primer")] = "M13F"; }
         return row.cells.join(",");
       }).join("\n");
-      const imported = importSamples(populated, order);
+      const imported = parseMappedSanger(inspectSangerSheet(populated, container), order, source);
       assert.deepEqual(imported.errors, []);
       assert.equal(imported.samples.length, 192);
       if (container === "Plate") {
         assert.equal(imported.samples[95].well, "H12");
         assert.equal(imported.samples[96].well, "A1");
         assert.equal(imported.samples[96].plateLabel, "Plate-2");
-      }
+      } else assert.equal(imported.samples[191].tubeLabel, "Tube-192");
+      assert.equal(imported.samples[0].reactions[0].primerSource, source);
     }
   }
-  for (const count of [0, 251, 1.5, NaN]) assert.throws(() => simpleOrderTemplate("Plate", count));
+  assert.equal(readDelimited(simpleOrderTemplate("Plate", 768)).length, 769);
+  for (const count of [0, MAX_SANGER_SAMPLES + 1, 1.5, NaN]) assert.throws(() => simpleOrderTemplate("Plate", count));
 });
 
 test("result recipients validate without granting access", () => {

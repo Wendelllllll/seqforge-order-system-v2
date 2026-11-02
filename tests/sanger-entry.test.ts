@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blankOrder, orderSchema, reactionCount } from "../src/lib/order-intake";
+import { blankOrder, MAX_SANGER_REACTIONS, MAX_SANGER_SAMPLES, orderSchema, reactionCount } from "../src/lib/order-intake";
 import { appendSangerSamples, newSangerSample, parseSangerPaste, verticalWell } from "../src/lib/sanger-entry";
 import { priceOrder } from "../src/lib/pricing";
 import { simpleOrderTemplate } from "../src/lib/simple-order-template";
@@ -91,7 +91,7 @@ test("Plate generation is vertical, crosses plates safely, and preserves explici
   const explicit = parseSangerPaste("Sample name\tPlate label\tWell\tPrimer\nDNA\tMyPlate\tC09\tT7", order);
   assert.equal(explicit.samples[0].well, "C9");
   assert.equal(explicit.samples[0].plateLabel, "MyPlate");
-  assert.equal(readDelimited(simpleOrderTemplate("Plate", 9))[9].cells[1], "A2");
+  assert.equal(readDelimited(simpleOrderTemplate("Plate", 9))[9].cells[2], "A2");
 });
 
 test("Invalid data fails visibly instead of silently losing columns or reactions", () => {
@@ -100,7 +100,7 @@ test("Invalid data fails visibly instead of silently losing columns or reactions
     assert.ok(result.errors.length, text);
   }
   assert.ok(parseSangerPaste("DNA\t3200\t100\tNotInCatalogue", blankOrder(), "SeqForge universal primer").errors.length);
-  assert.ok(parseSangerPaste("DNA\t3200\t100\t" + Array.from({length: 251}, (_, i) => `P${i}`).join(";"), blankOrder()).errors.length);
+  assert.ok(parseSangerPaste("DNA\t3200\t100\t" + Array.from({length: MAX_SANGER_REACTIONS + 1}, (_, i) => `P${i}`).join(";"), blankOrder()).errors.length);
 });
 
 test("Adding and appending samples maintains unique internal IDs without changing physical labels", () => {
@@ -173,9 +173,7 @@ test("Pre-mixed mapping requires confirmation and rejects contradictory sources 
 });
 
 test("Downloaded old templates and extended canonical metadata survive mapping", () => {
-  const sheet = inspectSangerSheet(simpleOrderTemplate("Plate", 1), "Plate");
-  sheet.rows[1].cells[3] = "Clone";
-  sheet.rows[1].cells[9] = "T7";
+  const sheet = inspectSangerSheet("#,wellID,Tube label,DNA Name,DNA Type,Template Length (bp),Conc. (ng/uL),My primers,Conc. (pmol/uL),SeqForge Primers,Special protocol\n1,A1,Plate-1,Clone,Plasmid,,,,,T7,", "Plate");
   assert.equal(sheet.columns[2], "plateLabel");
   const result = parseMappedSanger(sheet, { ...blankOrder(), container: "Plate" }, "primer-columns");
   assert.deepEqual(result.errors, []);
@@ -186,4 +184,65 @@ test("Downloaded old templates and extended canonical metadata survive mapping",
   assert.equal(storedResult.samples[0].sampleKey, "MyID");
   assert.equal(storedResult.samples[0].reactions[0].storedPrimerReference, "REF-42");
   assert.deepEqual(suggestMapping(stored.rows, false, "Tubes"), Array(6).fill(""));
+});
+
+test("Eight plates with two primers per sample preserve all samples and reactions in CSV and Excel imports", () => {
+  const order = { ...blankOrder(), container: "Plate" as const };
+  for (const delimiter of [",", "\t"]) {
+    const text = [["Sample name", "Plate label", "Well", "Primer", "Project"], ...Array.from({ length: 768 }, (_, i) => [`Clone-${i + 1}`, `Plate-${Math.floor(i / 96) + 1}`, verticalWell(i), "T7;M13R", "Ignore me"])]
+      .map(row => row.join(delimiter)).join("\n");
+    const result = parseMappedSanger(inspectSangerSheet(text, "Plate"), order, "SeqForge universal primer");
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.samples.length, 768);
+    assert.equal(reactionCount(result.samples), 1536);
+    assert.equal(result.samples[767].plateLabel, "Plate-8");
+    assert.equal(result.samples[767].well, "H12");
+    assert.deepEqual(result.samples[767].reactions.map(reaction => reaction.primerName), ["T7", "M13R"]);
+    assert.ok(!JSON.stringify(result.samples).includes("Ignore me"));
+  }
+});
+
+test("Separate reaction rows reach 1536 samples and 3072 reactions without losing physical grouping", () => {
+  const order = { ...blankOrder(), container: "Plate" as const };
+  const data = Array.from({ length: MAX_SANGER_SAMPLES }, (_, i) => ["T7", "M13R"].map(primer => `Clone-${i + 1},Plate-${Math.floor(i / 96) + 1},${verticalWell(i)},${primer}`)).flat();
+  const text = "Sample name,Plate label,Well,Primer\n" + data.join("\n");
+  const result = parseMappedSanger(inspectSangerSheet(text, "Plate"), order, "SeqForge universal primer");
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.samples.length, MAX_SANGER_SAMPLES);
+  assert.equal(reactionCount(result.samples), MAX_SANGER_REACTIONS);
+  assert.equal(result.samples.at(-1)?.plateLabel, "Plate-16");
+  assert.throws(() => inspectSangerSheet(text + "\nExtra,Plate-17,A1,T7", "Plate"), /3072/);
+});
+
+test("Sanger sample and expanded reaction bounds reject the entire import", () => {
+  const physicalOverflow = "Sample name,Primer\n" + Array.from({ length: MAX_SANGER_SAMPLES + 1 }, (_, i) => `DNA-${i + 1},T7`).join("\n");
+  const result = parseSangerPaste(physicalOverflow, blankOrder());
+  assert.deepEqual(result.samples, []);
+  assert.ok(result.errors.some(error => error.includes(String(MAX_SANGER_SAMPLES))));
+  const primers = Array.from({ length: MAX_SANGER_REACTIONS + 1 }, (_, i) => `P${i}`).join(";");
+  const expanded = parseSangerPaste(`Sample name,Primer\nDNA,${primers}`, blankOrder());
+  assert.deepEqual(expanded.samples, []);
+  assert.match(expanded.errors[0], /3072/);
+});
+
+test("A valid sub-1MB sheet can expand past 1MB internally without dropping notes", () => {
+  const notes = "N".repeat(500);
+  const text = "Sample name,Primer,Notes\n" + Array.from({ length: MAX_SANGER_SAMPLES }, (_, i) => `DNA-${i + 1},T7;M13R,${notes}`).join("\n");
+  assert.ok(Buffer.byteLength(text) < 1_000_000);
+  const parsed = parseSangerPaste(text, blankOrder(), "SeqForge universal primer");
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(reactionCount(parsed.samples), MAX_SANGER_REACTIONS);
+  assert.equal(parsed.samples.at(-1)?.notes, notes);
+  assert.match(parseSangerPaste("x".repeat(1_000_001), blankOrder()).errors[0], /1 MB/);
+});
+
+test("Expanded Sanger templates do not expand the Whole Plasmid mapping limit", () => {
+  const template = readDelimited(simpleOrderTemplate("Plate", MAX_SANGER_SAMPLES));
+  assert.equal(template.length, MAX_SANGER_SAMPLES + 1);
+  assert.equal(template.at(-1)?.cells[2], "H12");
+  assert.equal(template.at(-1)?.cells[1], "Plate-16");
+  assert.throws(() => simpleOrderTemplate("Plate", MAX_SANGER_SAMPLES + 1), /1536/);
+  const text = "Sample name,Primer\n" + Array.from({ length: 251 }, (_, i) => `DNA-${i + 1},T7`).join("\n");
+  assert.equal(inspectSangerSheet(text, "Plate", "SANGER").rows.length, 252);
+  assert.throws(() => inspectSangerSheet(text, "Plate", "WHOLE_PLASMID"), /250/);
 });

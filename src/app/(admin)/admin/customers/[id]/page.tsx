@@ -10,13 +10,40 @@ import { AdminOrders } from "@/components/admin-orders";
 import type { OrderQuery } from "@/lib/admin-order-filters";
 import { CustomerPricingEditor } from "@/components/customer-pricing-editor";
 import { getCustomerPricing } from "@/lib/customer-pricing-store";
-import { customerOverridesSchema } from "@/lib/customer-pricing";
+import { readCustomerPricingRecord } from "@/lib/customer-pricing";
 import { getRateSchedule } from "@/lib/pricing-store";
-import { ACTIVE_RATE_ITEMS } from "@/lib/rate-schedule";
+import { ACTIVE_RATE_ITEMS, type RateSchedule } from "@/lib/rate-schedule";
 import { formatMoney } from "@/lib/pricing";
 
 function Detail({ label, children }: { label: string; children?: ReactNode }) {
   return <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-900">{children || <span className="text-slate-400">Not provided</span>}</dd></div>;
+}
+
+function pricingHistoryGroups(previous: unknown, current: unknown, schedule: RateSchedule) {
+  try {
+    const before = readCustomerPricingRecord(previous);
+    const after = readCustomerPricingRecord(current);
+    const description = (value: number | undefined) => value === undefined ? "Use default rate" : `${formatMoney(value)} custom`;
+    const groups = [
+      { service: "SANGER", label: "Sanger", details: [] as string[] },
+      { service: "WHOLE_PLASMID", label: "Whole Plasmid", details: [] as string[] },
+      { service: "OLIGO", label: "Oligo", details: [] as string[] },
+      { service: "UNAVAILABLE", label: "Services no longer in the catalog", details: [] as string[] },
+    ];
+    for (const item of ACTIVE_RATE_ITEMS) {
+      if (before.overrides[item.key] === after.overrides[item.key]) continue;
+      groups.find(group => group.label === item.service)!.details.push(`${item.mode === "Whole plasmid" ? "≤12 kb" : item.mode === "Whole plasmid >12 kb" ? ">12 kb" : item.mode} · ${item.container}: ${description(before.overrides[item.key])} → ${description(after.overrides[item.key])} / ${item.unit}`);
+    }
+    for (const key of ["shortUnitCents", "longUnitCents"] as const) if (before.oligoOverrides[key] !== after.oligoOverrides[key]) groups[2].details.push(`${key === "shortUnitCents" ? "Lower" : "Upper"}-tier price: ${description(before.oligoOverrides[key])} → ${description(after.oligoOverrides[key])} / bp`);
+    for (const id of new Set([...Object.keys(before.addOnOverrides), ...Object.keys(after.addOnOverrides)])) {
+      if (before.addOnOverrides[id] === after.addOnOverrides[id]) continue;
+      const item = schedule.addOns?.find(value => value.id === id);
+      groups.find(group => group.service === (item?.service ?? "UNAVAILABLE"))!.details.push(`${item?.name ?? `Service ID: ${id}`}: ${description(before.addOnOverrides[id])} → ${description(after.addOnOverrides[id])} / ${item?.scope ?? "service"}`);
+    }
+    return groups.filter(group => group.details.length);
+  } catch {
+    return null;
+  }
 }
 
 export default async function CustomerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<OrderQuery> }) {
@@ -42,10 +69,8 @@ export default async function CustomerPage({ params, searchParams }: { params: P
     <CustomerPricingEditor key={customer.id} initial={pricing} defaultSchedule={defaultSchedule} customerName={customer.name} />
     <details className="panel p-5 sm:p-6"><summary className="cursor-pointer text-lg font-bold">Customer price change history <span className="text-sm font-normal text-slate-500">· Latest 20 revisions</span></summary>
       {pricingHistory.length ? <ul className="mt-5 divide-y divide-slate-200">{pricingHistory.map(change => {
-        const before = customerOverridesSchema.safeParse(change.previousOverrides);
-        const after = customerOverridesSchema.safeParse(change.overrides);
-        const description = (value: number | undefined) => value === undefined ? "Use default rate" : `${formatMoney(value)} custom`;
-        return <li key={change.id} className="space-y-3 py-4 first:pt-0"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">Revision {change.revision} · {change.actorName}</strong><time className="text-sm text-slate-500" dateTime={change.createdAt.toISOString()}>{formatDateTime(change.createdAt)}</time></div><p className="whitespace-pre-wrap text-sm">{change.reason}</p>{before.success && after.success ? <ul className="space-y-1 text-sm text-slate-600">{ACTIVE_RATE_ITEMS.filter(item => before.data[item.key] !== after.data[item.key]).map(item => <li key={item.key}>{item.service} · {item.mode === "Whole plasmid" ? "≤12 kb" : item.mode === "Whole plasmid >12 kb" ? ">12 kb" : item.mode} · {item.container}: {description(before.data[item.key])} → {description(after.data[item.key])} / {item.unit}</li>)}</ul> : <p className="text-sm text-slate-500">Historical price details are unavailable.</p>}</li>;
+        const groups = pricingHistoryGroups(change.previousOverrides, change.overrides, defaultSchedule);
+        return <li key={change.id} className="space-y-3 py-4 first:pt-0"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">Revision {change.revision} · {change.actorName}</strong><time className="text-sm text-slate-500" dateTime={change.createdAt.toISOString()}>{formatDateTime(change.createdAt)}</time></div><p className="whitespace-pre-wrap text-sm">{change.reason}</p>{groups ? groups.length ? <div className="space-y-3">{groups.map(group => <div key={group.service}><h3 className="text-sm font-semibold">{group.label}</h3><ul className="mt-1 space-y-1 text-sm text-slate-600">{group.details.map((detail, index) => <li key={index} className="break-words">{detail}</li>)}</ul></div>)}</div> : <p className="text-sm text-slate-500">Customer pricing saved; no displayed unit price changed.</p> : <p className="text-sm text-slate-500">Historical price details are unavailable. The saved record has not been changed.</p>}</li>;
       })}</ul> : <p className="mt-4 text-sm text-slate-500">No customer price changes have been saved. This account follows the default price schedule.</p>}
     </details>
     <div><div className="mb-4"><h2 className="text-xl font-bold">Saved delivery & billing</h2><p className="mt-2 text-sm text-slate-500">Current preferences saved by this customer. Each historical order retains the contact and billing details supplied at submission.</p></div>

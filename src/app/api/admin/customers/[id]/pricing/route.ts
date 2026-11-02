@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { customerPriceUpdateSchema } from "@/lib/customer-pricing";
-import { CustomerNotFound, CustomerPriceChanged, updateCustomerPricing } from "@/lib/customer-pricing-store";
+import { CustomerDefaultsChanged, CustomerNotFound, CustomerPriceChanged, InvalidCustomerPriceUpdate, updateCustomerPricing } from "@/lib/customer-pricing-store";
 import { hasTrustedRequestOrigin } from "@/lib/request-origin";
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -21,6 +21,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return Response.json(await updateCustomerPricing(prisma, session.user, id, parsed.data), { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof CustomerNotFound) return Response.json({ error: error.message }, { status: 404 });
+    if (error instanceof InvalidCustomerPriceUpdate) return Response.json({ error: error.message }, { status: 400 });
+    if (error instanceof CustomerDefaultsChanged) return Response.json({ code: "DEFAULT_PRICES_CHANGED", error: error.message, pricing: error.current, schedule: error.schedule }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     if (error instanceof CustomerPriceChanged) return Response.json({ error: error.message, pricing: error.current }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     console.error("Customer price update failed", error instanceof Error ? error.name : "Unknown error");
     return Response.json({ error: "Unable to save customer prices. Please try again." }, { status: 503 });

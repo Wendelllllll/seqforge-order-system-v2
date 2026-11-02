@@ -4,6 +4,7 @@ import { blankOrder, orderSchema, type OrderDraft } from "../src/lib/order-intak
 import { hasStandardOligoPrice, isOligoProductionBlocked, oligoSchema, type OligoDraft } from "../src/lib/oligo-schema";
 import { formatMoney, OLIGO_PRICING_VERSION, priceOrder, pricingSchema } from "../src/lib/pricing";
 import { orderFilterWhere, parseOrderFilters } from "../src/lib/admin-order-filters";
+import { DEFAULT_SCHEDULE, LEGACY_OLIGO_PRICING, savedRateScheduleSchema } from "../src/lib/rate-schedule";
 
 function item(): OligoDraft {
   return { name: "Primer-F", sequence: "acgt acgt\nNN", synthesisScale: "25 nmol", purification: "Desalted", modification5: "", modification3: "", modificationInternal: "", notes: "Keep this request" };
@@ -77,29 +78,23 @@ test("nonstandard scales, purification and any modification require separate quo
   }
 });
 
-test("standard pricing stops before 60 normalized bases while longer oligos remain valid quote requests", () => {
+test("standard oligos use the full-oligo 25/70 cent tiers at the inclusive 60-base boundary", () => {
   for (const length of [59, 60, 61]) {
     const oligo = { ...item(), sequence: ` ${"a".repeat(30)}\n${"c".repeat(length - 30)} ` };
     const draft = { ...order(), oligos: [oligo] };
     assert.equal(orderSchema.safeParse(draft).success, true, `${length} bases can still be submitted`);
-    assert.equal(hasStandardOligoPrice(oligo), length < 60);
+    assert.equal(hasStandardOligoPrice(oligo), true);
     const estimate = priceOrder(draft);
-    assert.equal(estimate.pendingQuote, length >= 60);
-    assert.equal(estimate.subtotalCents, length < 60 ? length * 25 : null);
+    assert.equal(estimate.pendingQuote, false);
+    assert.equal(estimate.subtotalCents, length <= 60 ? length * 25 : length * 70);
     assert.equal(estimate.quoteApprovalRequired, true);
-    if (length < 60) {
-      assert.deepEqual(estimate.lines.map(line => [line.quantity, line.unitCents, line.amountCents]), [[59, 25, 1475]]);
-      assert.equal(estimate.unpricedItems, undefined);
-    } else {
-      assert.deepEqual(estimate.lines, []);
-      assert.deepEqual(estimate.unpricedItems, [oligo.name]);
-      assert.equal(estimate.knownSubtotalCents, undefined);
-    }
+    assert.deepEqual(estimate.lines.map(line => [line.quantity, line.unitCents, line.amountCents]), [[length, length <= 60 ? 25 : 70, length * (length <= 60 ? 25 : 70)]]);
+    assert.equal(estimate.unpricedItems, undefined);
     assert.equal(pricingSchema.safeParse(estimate).success, true);
   }
 });
 
-test("mixed lengths and custom specifications price only eligible short oligos", () => {
+test("mixed lengths use both standard tiers while custom specifications stay quote-only", () => {
   const oligos = [
     { ...item(), name: "Short", sequence: "A".repeat(59) },
     { ...item(), name: "At-limit", sequence: "A".repeat(60) },
@@ -110,10 +105,53 @@ test("mixed lengths and custom specifications price only eligible short oligos",
   const quote = priceOrder({ ...order(), submissionMode: "Oligo modified", oligos });
   assert.equal(quote.pendingQuote, true);
   assert.equal(quote.subtotalCents, null);
-  assert.equal(quote.knownSubtotalCents, 1475);
-  assert.equal(quote.lines.length, 1);
+  assert.equal(quote.knownSubtotalCents, 7245);
+  assert.equal(quote.lines.length, 3);
   assert.equal(quote.lines[0].quantity, 59);
-  assert.deepEqual(quote.unpricedItems, ["At-limit", "Long", "Short-HPLC", "Short-modified"]);
+  assert.deepEqual(quote.unpricedItems, ["Short-HPLC", "Short-modified"]);
+  assert.equal(pricingSchema.safeParse(quote).success, true);
+});
+
+test("managed oligo prices and length boundary affect new estimates, not saved snapshots", () => {
+  const draft = { ...order(), oligos: [{ ...item(), sequence: "A".repeat(60) }, { ...item(), name: "Long", sequence: "C".repeat(61) }] };
+  const original = priceOrder(draft);
+  const schedule = { ...DEFAULT_SCHEDULE, revision: 9, oligo: { shortMaxBases: 80, shortUnitCents: 30, longUnitCents: 90 } };
+  const updated = priceOrder(draft, schedule);
+  assert.equal(updated.subtotalCents, 121 * 30);
+  assert.equal(original.subtotalCents, 60 * 25 + 61 * 70);
+  assert.equal(pricingSchema.parse(original).subtotalCents, 5770);
+  assert.ok(updated.version.includes("rates-9"));
+  assert.ok(updated.reviewReasons[0].includes("80 bases"));
+});
+
+test("legacy saved draft quotes retain the old 59-base limit until reviewed", () => {
+  const saved = savedRateScheduleSchema.parse({ revision: 4, rates: DEFAULT_SCHEDULE.rates });
+  assert.deepEqual(saved.oligo, LEGACY_OLIGO_PRICING);
+  const draft = { ...order(), oligos: [{ ...item(), sequence: "A".repeat(60) }] };
+  assert.equal(priceOrder(draft, saved).subtotalCents, null);
+  assert.equal(priceOrder(draft, DEFAULT_SCHEDULE).subtotalCents, 1500);
+});
+
+test("Oligo per-order add-ons stay separate from base counts and from unpriced specifications", () => {
+  const addOn = { id: "oligo-handling", name: "Oligo handling", service: "OLIGO" as const, scope: "order" as const, unitCents: 500, active: true };
+  const schedule = { ...DEFAULT_SCHEDULE, addOns: [addOn] };
+  const standard = priceOrder({ ...order(), addOnIds: [addOn.id] }, schedule);
+  assert.equal(standard.subtotalCents, 750);
+  assert.equal(standard.lines.filter(line => line.unit === "base").reduce((sum, line) => sum + line.quantity, 0), 10);
+  assert.equal(standard.lines.find(line => line.addOnId === addOn.id)?.quantity, 1);
+  const quote = priceOrder({ ...order(), addOnIds: [addOn.id], oligos: [{ ...item(), purification: "HPLC" }] }, schedule);
+  assert.equal(quote.subtotalCents, null);
+  assert.equal(quote.knownSubtotalCents, 500);
+  assert.equal(quote.lines.length, 1);
+  assert.deepEqual(quote.unpricedItems, [item().name]);
+  assert.equal(pricingSchema.safeParse(quote).success, true);
+});
+
+test("free standard synthesis remains a valid known subtotal beside quoted oligos", () => {
+  const schedule = { ...DEFAULT_SCHEDULE, oligo: { shortMaxBases: 60, shortUnitCents: 0, longUnitCents: 70 } };
+  const quote = priceOrder({ ...order(), oligos: [item(), { ...item(), name: "Quoted", purification: "HPLC" }] }, schedule);
+  assert.equal(quote.knownSubtotalCents, 0);
+  assert.equal(quote.subtotalCents, null);
   assert.equal(pricingSchema.safeParse(quote).success, true);
 });
 

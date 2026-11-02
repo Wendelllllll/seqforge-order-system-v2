@@ -20,7 +20,7 @@ export default async function ManifestPage({ params }: PageProps<"/manifest/[id]
     <div className="print-hide flex flex-wrap justify-between gap-3"><Link className="button-secondary" href={session.user.role === "admin" ? `/admin/orders/${id}` : `/orders/${id}`}>Back to order</Link><PrintButton /></div>
     <Brand />
     <div className="text-sm"><p className="font-bold">{order.user.name} · {order.user.organization} · {order.user.labName}</p><p className="mt-1">Submitted {formatDateTime(order.createdAt)}</p></div>
-    <OrderManifest order={order} />
-    <p className="text-xs text-slate-500">Demo submission document. Coordinate sample delivery and acceptance with SeqForge before shipping.</p>
+    <OrderManifest order={order} presentation="print" />
+    <p className="text-xs text-slate-500">Submission document. Coordinate sample delivery and acceptance with SeqForge before shipping.</p>
   </main>;
 }

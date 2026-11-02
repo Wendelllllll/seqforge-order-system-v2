@@ -26,6 +26,6 @@ export function DropboxSelector({ value, onChange }: { value: OrderDefaults; onC
     {value.dropbox && <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm"><strong>Selected: {value.dropbox.name}</strong><p>{value.dropbox.address}</p></div>}
     {stale && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Your saved dropbox selection changed or is no longer available. Review the current details and select a location again.</p>}
     {error ? <p role="alert" className="text-sm text-red-800">{error} <button type="button" className="underline" onClick={() => setReload(value => value + 1)}>Retry</button></p> : locations === null ? <p role="status" className="text-sm text-slate-500">Loading dropbox locations…</p> : <DropboxBrowser locations={locations} selectedId={stale ? undefined : value.dropboxId} compact onSelect={location => onChange({ ...value, deliveryMethod: "Dropbox", dropboxId: location.id, dropbox: dropboxSnapshot(location) })} />}
-    <p className="text-xs leading-5 text-slate-500">Sanger and Whole Plasmid samples only. Include the printed order manifest with your labelled samples. Confirm the exact box position and collection schedule before depositing samples.</p>
+    <p className="text-xs leading-5 text-slate-500">Sanger, Whole Plasmid and Fragment Analysis samples only. Include the printed order manifest with your labelled samples. Confirm the exact box position and collection schedule before depositing samples.</p>
   </div>;
 }

@@ -44,6 +44,7 @@ export function getStatusLabel(status: string) {
 
 export function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -52,6 +53,8 @@ export function formatDate(value: Date) {
 
 export function formatDateTime(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    timeZoneName: "short",
     month: "short",
     day: "numeric",
     year: "numeric",

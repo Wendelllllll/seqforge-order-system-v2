@@ -4,6 +4,16 @@ New customer registrations and newly submitted orders can notify **one configure
 
 The sender and recipient are independent of website hosting. A local or hosted website can authenticate to Gmail or an authorized company SMTP mailbox on cPanel. Changing providers does not require moving company mailboxes or changing the order database.
 
+## Public Contact form
+
+`/contact` submits inquiries to `POST /api/contact`. The recipient is fixed on the server to **info@seqforge.com**, independently of `INTERNAL_MAIL_TO`. Set `CONTACT_MAIL_MODE=smtp` in the protected runtime env file to enable it; missing/`off` disables delivery and returns an honest error with a direct email alternative. There is no simulated-success preview mode. `CONTACT_MAIL_FROM` optionally overrides the sender; otherwise it uses `INTERNAL_MAIL_FROM`, then `CUSTOMER_MAIL_FROM`. All existing SMTP TLS and test guards apply. No mailbox, cPanel or DNS change is required.
+
+Mail contains the visitor's name, email, organization, service and message as plain text. The validated email is used only as Reply-To, never as the authenticated From or a recipient. Staff can reply directly. Form addresses are not verified accounts. There are no CC/BCC recipients, customer auto-replies, order/account records or attachments. The browser reports success only after SMTP acceptance, which is not proof of inbox delivery. Failure keeps the form text and allows retry or direct email.
+
+The endpoint requires the configured public Origin, JSON, a UUID idempotency key and bounded fields/body (32 KiB). A hidden honeypot rejects automated fills. Limits allow five attempts per email per hour, at least 60 seconds apart, and 60 attempts globally per hour. Limits count SMTP failures too. Retrying the same accepted or in-flight key and payload does not resend; changed content requires a new key. Error logs contain only sanitized codes.
+
+Limits and 24-hour successful-request deduplication are bounded **process-local memory**, appropriate to the current single application process; they reset on process restart and are not shared across replicas. This contact form has no durable inquiry queue or automatic retry worker. A transport failure after remote acceptance can still duplicate an email on retry. Use shared durable controls before scaling to multiple app processes. Automated coverage uses fake transports and never sends real inquiries. Verify actual receipt with an explicitly authorized user submission after enabling each environment.
+
 ## Configure locally
 
 1. Apply migrations with `npm run db:deploy`.

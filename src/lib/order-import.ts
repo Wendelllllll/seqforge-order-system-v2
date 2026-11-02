@@ -1,21 +1,30 @@
 import { convertLegacyRows, isLegacyHeader, type LegacyPrimerChoice } from "./legacy-order-import";
-import { blankReaction, blankSample, MAX_IMPORT_BYTES, MAX_REACTIONS, orderSchema, sampleSchema, type OrderDraft, type SampleDraft } from "./order-intake";
+import { blankReaction, blankSample, importRowLimit, MAX_IMPORT_BYTES, orderFieldLabel, orderSchema, sampleSchema, type OrderDraft, type SampleDraft } from "./order-intake";
 
 export const SAMPLE_COLUMNS = ["sampleKey", "sampleName", "tubeLabel", "plateLabel", "well", "templateType", "templateLength", "concentration", "preparation", "notes"] as const;
 export const REACTION_COLUMNS = ["primerSource", "primerName", "primerConcentration", "storedPrimerReference", "primerSequence", "purification", "synthesisScale", "modification5", "modification3", "modificationInternal", "specialProtocol"] as const;
 export const IMPORT_COLUMNS = [...SAMPLE_COLUMNS, ...REACTION_COLUMNS];
 
-// Strict CSV/TSV reader: preserves quoted newlines and reports physical source lines.
+// Detect delimiters outside quotes in the first nonempty record. Tabs take
+// precedence; a semicolon inside an ordinary comma CSV remains cell content.
+// The strict reader preserves quoted newlines and physical source line numbers.
 export function readDelimited(input: string): { cells: string[]; line: number }[] {
   const text = input.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-  let delimiter = ",", inQuote = false;
+  let delimiter = ",", inQuote = false, commas = 0, semicolons = 0, tabs = 0, content = false;
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '"') {
+      content = true;
       if (inQuote && text[i + 1] === '"') i++;
       else inQuote = !inQuote;
-    } else if (!inQuote && text[i] === "\t") { delimiter = "\t"; break; }
-    else if (!inQuote && text[i] === "\n") break;
+    } else if (!inQuote) {
+      if (text[i] === "\t") tabs++;
+      else if (text[i] === ",") commas++;
+      else if (text[i] === ";") semicolons++;
+      else if (text[i] === "\n") { if (content || tabs || commas || semicolons) break; }
+      else if (text[i].trim()) content = true;
+    }
   }
+  delimiter = tabs ? "\t" : commas ? "," : semicolons ? ";" : ",";
   const rows: { cells: string[]; line: number }[] = [];
   let cells: string[] = [], cell = "", quoted = false, closed = false, line = 1, startLine = 1;
   const endCell = () => { cells.push(cell.trim()); cell = ""; closed = false; };
@@ -38,9 +47,12 @@ export function readDelimited(input: string): { cells: string[]; line: number }[
   return rows;
 }
 
-export function importSamples(text: string, order: Omit<OrderDraft, "samples">, legacyPrimerChoice: LegacyPrimerChoice = "require-single"): { samples: SampleDraft[]; errors: string[] } {
+export function importSamples(text: string, order: Omit<OrderDraft, "samples">, legacyPrimerChoice: LegacyPrimerChoice = "require-single", internallyGenerated = false): { samples: SampleDraft[]; errors: string[] } {
   const fail = (errors: string[]) => ({ samples: [], errors });
-  if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES) return fail(["The import is larger than 1 MB."]);
+  // Only the already byte-checked clipboard mapper uses this larger bound: one
+  // physical row can expand into several complete reaction rows internally.
+  const byteLimit = internallyGenerated ? 8_000_000 : MAX_IMPORT_BYTES;
+  if (new TextEncoder().encode(text).length > byteLimit) return fail([internallyGenerated ? "The expanded import is too large. Split it into smaller orders." : "The import is larger than 1 MB."]);
   let rows: ReturnType<typeof readDelimited>;
   try { rows = readDelimited(text); } catch (error) { return fail([error instanceof Error ? error.message : "Unable to read this file."]); }
   if (rows.length < 2) return fail(["Include a header row and at least one reaction row."]);
@@ -53,7 +65,7 @@ export function importSamples(text: string, order: Omit<OrderDraft, "samples">, 
     ];
   }
   const [header, ...data] = rows;
-  if (data.length > MAX_REACTIONS) return fail([`This demo supports at most ${MAX_REACTIONS} reactions per order.`]);
+  if (data.length > importRowLimit(order.service)) return fail([`This order supports at most ${importRowLimit(order.service)} reaction rows.`]);
   const required = ["sampleKey", "sampleName", "templateType", "primerSource", "primerName", ...(order.container === "Plate" ? ["plateLabel", "well"] : ["tubeLabel"])];
   const errors = required.filter((name) => !header.cells.includes(name)).map((name) => `Header: missing ${name}.`);
   const seenHeaders = new Set<string>();
@@ -79,7 +91,7 @@ export function importSamples(text: string, order: Omit<OrderDraft, "samples">, 
     const existing = groups.get(key);
     if (existing) {
       const changed = SAMPLE_COLUMNS.filter((column) => column !== "sampleKey" && existing.sample[column] !== sample[column]);
-      if (changed.length) errors.push(`Row ${line}: sample ${sample.sampleKey} conflicts with row ${existing.line} (${changed.join(", ")}). Repeat identical sample details for another primer.`);
+      if (changed.length) errors.push(`Row ${line}: sample ${sample.sampleKey} conflicts with row ${existing.line} (${changed.map(orderFieldLabel).join(", ")}). Repeat identical sample details for another primer.`);
       existing.sample.reactions.push(reaction);
       existing.reactionLines.push(line);
     } else groups.set(key, { sample: { ...sample, reactions: [reaction] }, line, reactionLines: [line] });
@@ -90,7 +102,7 @@ export function importSamples(text: string, order: Omit<OrderDraft, "samples">, 
     if (issue.path[0] !== "samples") continue;
     const entry = typeof issue.path[1] === "number" ? entries[issue.path[1]] : undefined;
     const line = entry && issue.path[2] === "reactions" && typeof issue.path[3] === "number" ? entry.reactionLines[issue.path[3]] : entry?.line;
-    errors.push(`${line ? `Row ${line}` : "Import"} · ${String(issue.path.at(-1))}: ${issue.message}`);
+    errors.push(`${line ? `Row ${line}` : "Import"} · ${orderFieldLabel(String(issue.path.at(-1)))}: ${issue.message}`);
   }
   if (errors.length) return fail(errors);
   // Order-level fields can remain unfinished during sample import.

@@ -24,7 +24,7 @@ export default async function OrdersPage() {
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Your orders</h1>
           <p className="mt-2 text-sm text-slate-500">Review submitted orders, current status, and available results.</p>
         </div>
-        <Link href="/orders/new" className="button-primary justify-center"><Plus className="h-4 w-4" /> New order</Link>
+        <Link href="/orders/new" className="customer-order-button"><Plus size={21} aria-hidden="true" /> New order</Link>
       </div>
 
       <section className="panel mt-8">
@@ -39,7 +39,7 @@ export default async function OrdersPage() {
                     <td className="font-semibold text-slate-900">{order.orderName}</td>
                     <td>{serviceLabel(order.service)}{order.intakeVersion >= 2 ? <p className="mt-1 text-xs text-slate-500">{order.priority} · {order.container} · {order.submissionMode}</p> : null}</td>
                     <td>{formatDate(order.createdAt)}</td>
-                    <td>{order.service === "OLIGO" ? <>{oligoCount(order.oligoSnapshot)} oligos</> : <>{order.samples.length} samples{order.service !== "WHOLE_PLASMID" && <> / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)} reactions</>}</>}</td>
+                    <td>{order.service === "OLIGO" ? <>{oligoCount(order.oligoSnapshot)} oligos</> : <>{order.samples.length} samples{order.service === "SANGER" && <> / {order.samples.reduce((sum, sample) => sum + sample._count.reactions, 0)} reactions</>}</>}</td>
                     <td><StatusBadge status={order.status} /></td>
                     <td>{order.status === "COMPLETED" && order.result ? <span className="font-semibold text-emerald-700">Available</span> : <span className="text-slate-400">—</span>}</td>
                     <td><Link href={`/orders/${order.id}`} className="font-bold text-cyan-700 hover:text-cyan-900">View</Link></td>

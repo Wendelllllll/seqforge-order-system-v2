@@ -14,7 +14,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-dropboxes": "tsx scripts/seed-dropboxes.ts",
     "db:studio": "prisma studio",
-    "test": "tsx --test tests/order-intake.test.ts tests/pricing.test.ts tests/sanger-entry.test.ts tests/order-resume.test.ts tests/whole-plasmid.test.ts tests/oligo-entry.test.ts tests/oligo-backend.test.ts tests/customer-pricing.test.ts tests/customer-price-display.test.ts tests/internal-mail.test.ts tests/customer-mail.test.ts tests/request-origin.test.ts tests/dropboxes.test.ts tests/password-reset.test.ts",
+    "test": "tsx --test tests/order-intake.test.ts tests/pricing.test.ts tests/sanger-entry.test.ts tests/sanger-qa-regressions.test.ts tests/fragment-analysis.test.ts tests/sanger-grid-navigation.test.ts tests/sample-groups.test.ts tests/order-resume.test.ts tests/whole-plasmid.test.ts tests/oligo-entry.test.ts tests/oligo-backend.test.ts tests/customer-pricing.test.ts tests/customer-price-display.test.ts tests/internal-mail.test.ts tests/customer-mail.test.ts tests/request-origin.test.ts tests/dropboxes.test.ts tests/password-reset.test.ts tests/contact.test.ts",
     "test:db": "tsx --test tests/order-persistence.test.ts",
     "db:import-sqlite": "tsx scripts/import-sqlite.ts",
     "db:deploy": "prisma migrate deploy",

@@ -23,7 +23,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/o
   if (!order) {
     return Response.json({ error: "Order not found." }, { status: 404 });
   }
-  if (order.service === "OLIGO") return Response.json({ error: "This oligo request is awaiting a quote and customer approval. Result upload cannot complete a quote-pending order." }, { status: 409 });
+  if (["OLIGO", "FRAGMENT_ANALYSIS"].includes(order.service)) return Response.json({ error: "This request is awaiting a quote and customer approval. Result upload cannot complete a quote-pending order." }, { status: 409 });
   if (order.status === "COMPLETED") return Response.json({ error: "Move this order back to QC before replacing its published result." }, { status: 409 });
 
   const formData = await request.formData();

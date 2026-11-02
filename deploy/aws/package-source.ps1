@@ -115,7 +115,7 @@ function Add-SourceItem([string]$LiteralPath) {
 $allowedFiles = @(
     'package.json', 'package-lock.json', 'next.config.ts', 'postcss.config.mjs',
     'tsconfig.json', 'prisma.config.ts', 'prisma/schema.prisma',
-    'scripts/seed-dropboxes.ts', 'scripts/internal-mail.ts'
+    'scripts/seed-dropboxes.ts', 'scripts/internal-mail.ts', 'scripts/initialize-pricing-catalog.ts'
 )
 $allowedDirectories = @('src', 'public', 'prisma/migrations', 'deploy/aws')
 foreach ($relative in $allowedFiles + $allowedDirectories) {

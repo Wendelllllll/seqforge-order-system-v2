@@ -84,6 +84,7 @@ model Order {
   pricingSnapshot     Json?
   fulfillmentSnapshot Json?
   oligoSnapshot       Json?
+  fragmentSnapshot    Json?
   userId              String
   service             String          @default("SANGER")
   intakeVersion       Int             @default(1)

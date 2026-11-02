@@ -16,3 +16,7 @@
 .site-page main :is(h1,h2){font-family:"Nippo",Arial,Helvetica,sans-serif;font-weight:400;font-synthesis:none;font-feature-settings:"dlig" 1;letter-spacing:-.025em;text-wrap:balance}
 
 .contact-call-label{display:flex!important;align-items:center;gap:9px}.contact-phone-icon{display:block;flex:none;color:inherit}
+.contact-page .form-notice a{text-decoration:underline;text-underline-offset:3px}
+.contact-page .form-status[data-state="error"]{color:#9c342b}
+.contact-page .form-card .button:disabled{opacity:.65;cursor:default}
+.contact-page .form-card[aria-busy="true"] .button{cursor:wait}

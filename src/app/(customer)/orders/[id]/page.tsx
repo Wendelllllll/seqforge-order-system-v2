@@ -35,7 +35,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
       {query.submitted === "1" ? (
         <div className="mb-6 flex gap-3 border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your request for {order.service === "OLIGO" ? <>{oligoCount(order.oligoSnapshot)} oligos</> : <>{order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} {order.service !== "WHOLE_PLASMID" && <>and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions</>}</>} is saved under {order.orderNumber}.</p></div>
+          <div><p className="font-bold">Order submitted successfully</p><p className="mt-1 text-sm text-emerald-700">Your request for {order.service === "OLIGO" ? <>{oligoCount(order.oligoSnapshot)} oligos</> : <>{order.samples.length} physical {order.samples.length === 1 ? "sample" : "samples"} {order.service === "SANGER" && <>and {order.samples.reduce((total, sample) => total + sample.reactions.length, 0)} reactions</>}</>} is saved under {order.orderNumber}.</p></div>
         </div>
       ) : null}
 
@@ -50,7 +50,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
 
       {order.status === "ON_HOLD" ? <section className="mt-6 border border-rose-200 bg-rose-50 p-5 text-rose-950"><h2 className="font-bold">Your order needs attention</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{order.holdReason}</p><p className="mt-3 text-xs leading-5">The order is paused while this is resolved. Please follow the lab’s instructions above. If you contact SeqForge, include order number {order.orderNumber}.</p></section> : latestResolution ? <section className="mt-6 border border-emerald-200 bg-emerald-50 p-5 text-emerald-950"><h2 className="font-bold">Order hold resolved</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{latestResolution.note}</p><p className="mt-3 text-xs">Updated {formatDateTime(latestResolution.createdAt)}</p></section> : null}
 
-      {order.service === "OLIGO" ? <section className="panel mt-8 border-amber-200 bg-amber-50 p-5 sm:p-6"><h2 className="font-bold text-amber-950">Awaiting lab quote</h2><p className="mt-2 text-sm text-amber-900">Your request is saved for review. The lab will contact you to confirm specifications and price. Production starts only after you approve the quote.</p></section> : <section className="panel mt-8 p-5 sm:p-6">
+      {["OLIGO", "FRAGMENT_ANALYSIS"].includes(order.service) ? <section className="panel mt-8 border-amber-200 bg-amber-50 p-5 sm:p-6"><h2 className="font-bold text-amber-950">Awaiting lab quote</h2><p className="mt-2 text-sm text-amber-900">Your request is saved for review. The lab will contact you to confirm specifications and price. Production starts only after you approve the quote.</p></section> : <section className="panel mt-8 p-5 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-6">
           {ORDER_PROGRESS_STATUSES.map((status, index) => {
             const complete = index <= currentIndex;
@@ -80,7 +80,7 @@ export default async function OrderDetailPage({ params, searchParams }: PageProp
             </dl>
           </section>
 
-          {order.service !== "OLIGO" && <section className={`border p-5 ${releasedResult ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+          {!["OLIGO", "FRAGMENT_ANALYSIS"].includes(order.service) && <section className={`border p-5 ${releasedResult ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
             <div className="flex items-center gap-3"><FlaskConical className={`h-5 w-5 ${releasedResult ? "text-emerald-700" : "text-slate-400"}`} /><h2 className="text-sm font-bold text-slate-950">Sequencing result</h2></div>
             {releasedResult ? (
               <div className="mt-4">
