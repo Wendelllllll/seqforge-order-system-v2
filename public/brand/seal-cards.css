@@ -1,8 +1,7 @@
 /* Static seal illustrations: no sprite canvases, hover motion or scroll effects. */
 .seal-chapter{position:relative;background:#fff;padding:30px 6% 84px;color:#112d57}
-.seal-chapter-heading{max-width:1200px;margin:0 auto 30px;display:flex;align-items:start;justify-content:space-between;gap:24px}
-.seal-chapter-heading .micro-label{color:#008579;font-size:12px;line-height:1.7;letter-spacing:1.6px;margin:0}
-.seal-chapter-heading h2{max-width:570px;font-size:clamp(25px,2.7vw,38px);font-weight:500;line-height:1.2;letter-spacing:-1px;margin:0}
+.seal-chapter-heading{max-width:1200px;margin:0 auto 30px}
+.seal-chapter-heading h2{font-size:clamp(25px,2.7vw,38px);font-weight:500;line-height:1.2;letter-spacing:-1px;margin:0}
 .seal-cards{max-width:1200px;margin:auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
 .seal-card{background:transparent;border:0;border-radius:0;box-shadow:none;overflow:visible;padding:12px 20px 20px}
 .seal-card-top{display:flex;align-items:center;justify-content:center;gap:22px;color:#327263;font-size:12px;letter-spacing:1.5px;font-family:monospace}
@@ -20,7 +19,6 @@
   .seal-pose{height:260px}
   .seal-still{width:min(80%,208px)}
   .seal-card-copy h3{font-size:21px}
-  .seal-chapter-heading{flex-direction:column;gap:12px}
 }
 @media(max-width:640px){
   .seal-chapter{padding:22px 6% 48px}
