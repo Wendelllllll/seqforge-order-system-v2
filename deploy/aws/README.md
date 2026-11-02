@@ -10,15 +10,16 @@ The created resources are an Ubuntu 24.04.4, 4 GB / 2 vCPU instance named `seqfo
 
 | Item | Verified value |
 | --- | --- |
-| Release directory | `/opt/seqforge/releases/20261101-4` |
-| Running app image | `seqforge-web:20261101-4` |
-| App image ID | `sha256:d90195a41323c9a7449c0fcf5b711349f921f48ebc84aaaf34121f20cee74e67` |
-| Previous healthy app / rollback | `seqforge-web:20261101-3` (`sha256:315b21f8cfb8418d9e119b4152df4999a0f93d74b31275f9d4f077b0d942a1be`) |
+| Release directory | `/opt/seqforge/releases/20261101-5` |
+| Running app image | `seqforge-web:20261101-5` |
+| App image ID | `sha256:0d79ff9869905b3c55ec5119e739913334d7f95e02e4c982a899cb272cde5b72` |
+| Previous healthy app / rollback | `seqforge-web:20261101-4` (`sha256:d90195a41323c9a7449c0fcf5b711349f921f48ebc84aaaf34121f20cee74e67`) |
 | Node base image | `node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da` |
 | Caddy image | `caddy@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e` (Caddy 2.11.7) |
 | Runtime versions | Node 22.23.4, Next.js 16.4.3, Prisma Client 6.19.3 |
 | Original release-2 source ZIP SHA-256 | `ca550e4f3f9b62b8bc1693c52ac7bf1bcc5d23b612f7ab7cb32893aac944c03c` |
 
+- Release-5 removes the obsolete homepage Sample Planner entry, dialog and handlers, plus the scroll story's corner slogan. Only `public/brand/index.html`, `lab.js`, `scroll-chapter.js` and `scroll-chapter.css` changed; the story's titles remain unchanged. The step navigation stays centered on desktop and avoids inherited mobile menu styling. Changed scripts/styles use content-versioned URLs. All four served hashes and HTTPS health checks passed; desktop/mobile review and retained story interactions passed without creating orders. The source manifest SHA-256 is `22936d8d9bd15d40cbedf6d12e169aa87248aad7ef2be41ac78fecaa495f66a2`; runtime, database and Caddy are unchanged.
 - Release-4 simplifies the seal-section heading to one sentence, “From your bench to your next step.” It replaces only `public/brand/index.html` and `public/brand/seal-cards.css` on top of release-3. Both served asset hashes match, the homepage and health endpoint return 200, and desktop/mobile visual checks passed. The source manifest SHA-256 is `c38d968bc3feb5a4f0721dfded7bcd50ab944ee147cb03891ea84fd9fd78fc29`; the build/runtime, database and Caddy configuration are unchanged.
 - Release-3 is a static homepage update based on the verified release-2 image. It replaces only `public/brand/index.html`, `home-recovery.css`, `lab.js`, `scroll-mesh.js` and `seal-cards.css`: the new brand slogan, removal of motion controls, and fixed seal poses using existing artwork. The Next.js build ID remains `nG-weIHVO1e23_dSTkEQT`; no dependency installation, application rebuild or database migration was required. The release source manifest SHA-256 is `aa046c5ddfaef9df70b57b60d7e8a7570720072c1b9f6b1789604150b4dfc863`. Only the app container was replaced; Caddy retains its existing release-2 configuration bind. Use the normal full-build procedure below for future application changes; this static-only shortcut applies only to directly served `public/` assets.
 - Linux dependency installation, production compilation, TypeScript and all 27 static-page generations passed. Linux npm installation reported 16 moderate advisories, with no high/critical advisories; the separate runtime-only audit reported zero. Release-1 is retained unused and must **not** be started or used as a rollback target because it contains the superseded vulnerable dependencies.

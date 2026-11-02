@@ -55,10 +55,10 @@ Excel 的 **`.xlsx` 工作簿上传不支持**，请复制单元格或导出 CSV
 ## AWS 当前配置和数据边界
 
 - 区域：Oregon，`us-west-2`；Ubuntu 24.04，实例 `seqforge-test-web`，4 GB / 2 vCPU，附加静态 IP。
-- 应用：Docker Compose 运行 `seqforge-web:20261101-4` 和 Caddy；对外提供 80/443，SSH 限定管理员来源；3000 和数据库 5432 不公开。
+- 应用：Docker Compose 运行 `seqforge-web:20261101-5` 和 Caddy；对外提供 80/443，SSH 限定管理员来源；3000 和数据库 5432 不公开。
 - 数据库：独立、私有的加密 PostgreSQL 18.6，资源名 `seqforge-test-db`；应用通过严格验证的 TLS 连接。
-- 当前发布目录：`/opt/seqforge/releases/20261101-4`；结果文件在独立的 `/srv/seqforge/seqforgebio/results`，不会因替换应用镜像而清空。
-- Release-3 更新首页标语、移除动效开关并将海豹改为静态姿势；release-4 将海豹区域标题简化为一句。两次都是静态文件更新，没有数据库迁移。Release-3 保留为当前可回退版本；后续修改下单逻辑等应用代码仍按下方完整构建流程发布。
+- 当前发布目录：`/opt/seqforge/releases/20261101-5`；结果文件在独立的 `/srv/seqforge/seqforgebio/results`，不会因替换应用镜像而清空。
+- Release-3 更新首页标语、移除动效开关并将海豹改为静态姿势；release-4 简化海豹区域标题；release-5 清除首页残留的 Sample Planner 和滚动故事右下角口号。这些都是静态文件更新，没有数据库迁移。Release-4 保留为当前可回退版本；后续修改下单逻辑等应用代码仍按下方完整构建流程发布。
 - 日常实例备份保留七份，数据库备份保留七天。已验证一次受控重启后的自动恢复和私有存储持久性，但这不能替代备份恢复测试。
 
 本地数据库与 AWS 数据库是两套独立数据。GitHub 不会同步客户、订单、管理员身份、专属报价、结果文件或浏览器草稿；这次也没有把开发电脑上的数据库复制到 AWS。真实客户历史数据需要另行制定导入、校验和回退方案。
