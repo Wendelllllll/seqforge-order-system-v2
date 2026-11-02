@@ -10,15 +10,16 @@ The created resources are an Ubuntu 24.04.4, 4 GB / 2 vCPU instance named `seqfo
 
 | Item | Verified value |
 | --- | --- |
-| Release directory | `/opt/seqforge/releases/20261101-8` |
-| Running app image | `seqforge-web:20261101-8` |
-| App image ID | `sha256:2f4c13189ea0aa3c88ac04d1c34ca9155ff05c0b94a1af52bd2c74795b8ea5ec` |
-| Previous healthy app / rollback | `seqforge-web:20261101-7` (`sha256:ecfe1ed3fe2b00ada0b041833dfb9ac50c79b6b01617ff461b13c04693ccf54b`) |
+| Release directory | `/opt/seqforge/releases/20261101-9` |
+| Running app image | `seqforge-web:20261101-9` |
+| App image ID | `sha256:80b8c6810611d43a572e4c7e9df3d483cae92c93d88a7beea99b8250fd49dc92` |
+| Previous healthy app / rollback | `seqforge-web:20261101-8` (`sha256:2f4c13189ea0aa3c88ac04d1c34ca9155ff05c0b94a1af52bd2c74795b8ea5ec`) |
 | Node base image | `node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da` |
 | Caddy image | `caddy@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e` (Caddy 2.11.7) |
 | Runtime versions | Node 22.23.4, Next.js 16.4.3, Prisma Client 6.19.3 |
 | Original release-2 source ZIP SHA-256 | `ca550e4f3f9b62b8bc1693c52ac7bf1bcc5d23b612f7ab7cb32893aac944c03c` |
 
+- Release-9 updates only the homepage story's first Prepare scene/card and its scoped styles; the Sequence and Results scenes remain unchanged. Only `public/brand/scroll-chapter.js`, `scroll-chapter.css` and their content-versioned URLs in `index.html` changed. Desktop/mobile preview, JavaScript syntax, and live DOM/screenshot checks passed. All three served hashes match, the homepage and health endpoint return 200, and the app is healthy. The Next build/runtime and Caddy are unchanged; no database migration was needed. Release-8 remains the rollback image. Release-9 source manifest SHA-256: `4a753d1eebdf8f0d55560f4d28db48292eaeae05c8b14b0d8d1fdb21e4ac7342`.
 - Releases 7–8 are homepage copy refinements: neutral sample-label captions, consistent `ILLUSTRATIVE` markers on all three story panels, and removal of the redundant Results bottom note. Only `public/brand/scroll-chapter.js` and its content-versioned URL in `public/brand/index.html` changed. Served hashes, health and live DOM checks passed; runtime, database and Caddy are unchanged. Release-8 source manifest SHA-256: `8684f39052a4ffbf20e1880d9246dfc6c89863369048e743c9852ebd610961c8`.
 - Release-6 adds the public Sanger preparation guide at `/sample-preparation.html` and its stylesheet, updates the homepage sequencing story and guide links, and routes the Sanger page's preparation links to the guide. Six public assets changed or were added; the original reference document and customer-specific information are excluded. The guide retains listed and 2× quantities for laboratory confirmation and location-specific pickup arrangements. Content/unit audit, desktop/mobile layout and navigation checks passed. After the app restart, both new assets returned 200 with correct content types; all six served hashes and health checks passed. Source manifest SHA-256: `56bbdaba4dc567cd2897ec31ad32e9dadc378d3bde88c1466c535fe3b19441a0`. This is an explicit public-file URL, so no route rewrite or Next rebuild was required; runtime, database and Caddy are unchanged.
 - Release-5 removes the obsolete homepage Sample Planner entry, dialog and handlers, plus the scroll story's corner slogan. Only `public/brand/index.html`, `lab.js`, `scroll-chapter.js` and `scroll-chapter.css` changed; the story's titles remain unchanged. The step navigation stays centered on desktop and avoids inherited mobile menu styling. Changed scripts/styles use content-versioned URLs. All four served hashes and HTTPS health checks passed; desktop/mobile review and retained story interactions passed without creating orders. The source manifest SHA-256 is `22936d8d9bd15d40cbedf6d12e169aa87248aad7ef2be41ac78fecaa495f66a2`; runtime, database and Caddy are unchanged.

@@ -55,10 +55,10 @@ Excel 的 **`.xlsx` 工作簿上传不支持**，请复制单元格或导出 CSV
 ## AWS 当前配置和数据边界
 
 - 区域：Oregon，`us-west-2`；Ubuntu 24.04，实例 `seqforge-test-web`，4 GB / 2 vCPU，附加静态 IP。
-- 应用：Docker Compose 运行 `seqforge-web:20261101-8` 和 Caddy；对外提供 80/443，SSH 限定管理员来源；3000 和数据库 5432 不公开。
+- 应用：Docker Compose 运行 `seqforge-web:20261101-9` 和 Caddy；对外提供 80/443，SSH 限定管理员来源；3000 和数据库 5432 不公开。
 - 数据库：独立、私有的加密 PostgreSQL 18.6，资源名 `seqforge-test-db`；应用通过严格验证的 TLS 连接。
-- 当前发布目录：`/opt/seqforge/releases/20261101-8`；结果文件在独立的 `/srv/seqforge/seqforgebio/results`，不会因替换应用镜像而清空。
-- Release-3 更新首页标语和静态海豹；release-4 简化海豹标题；release-5 清除旧 Sample Planner；release-6 更新三屏测序文案，并增加 `/sample-preparation.html` 英文 Sanger 送样指南；release-7/8 调整样品标签语气、统一三屏的 ILLUSTRATIVE 角标并删除 Results 底部重复说明。指南保留普通量/2×量供实验室确认，取件按地点安排；原始参考文件及客户信息没有上传。这些都是静态文件更新，没有数据库迁移。Release-7 保留为当前可回退版本；后续修改下单逻辑等应用代码仍按下方完整构建流程发布。
+- 当前发布目录：`/opt/seqforge/releases/20261101-9`；结果文件在独立的 `/srv/seqforge/seqforgebio/results`，不会因替换应用镜像而清空。
+- Release-3 更新首页标语和静态海豹；release-4 简化海豹标题；release-5 清除旧 Sample Planner；release-6 更新三屏测序文案，并增加 `/sample-preparation.html` 英文 Sanger 送样指南；release-7/8 调整样品标签语气、统一三屏的 ILLUSTRATIVE 角标并删除 Results 底部重复说明；release-9 只调整第一屏 Prepare 的文案、卡片及局部样式，Sequence 和 Results 保持不变。Release-9 的桌面/手机预览、线上浏览器画面、三项文件校验、首页和健康接口检查已通过。指南保留普通量/2×量供实验室确认，取件按地点安排；原始参考文件及客户信息没有上传。这些都是静态文件更新，没有数据库迁移。Release-8 保留为当前可回退版本；后续修改下单逻辑等应用代码仍按下方完整构建流程发布。
 - 日常实例备份保留七份，数据库备份保留七天。已验证一次受控重启后的自动恢复和私有存储持久性，但这不能替代备份恢复测试。
 
 本地数据库与 AWS 数据库是两套独立数据。GitHub 不会同步客户、订单、管理员身份、专属报价、结果文件或浏览器草稿；这次也没有把开发电脑上的数据库复制到 AWS。真实客户历史数据需要另行制定导入、校验和回退方案。
