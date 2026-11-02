@@ -212,6 +212,7 @@ async function verifyCustomer(cookie: string, email: string, next: string, exerc
 
 async function main() {
   const startingSchedule = await (await request("/api/pricing")).json();
+  assert.deepEqual(startingSchedule.oligo, { unitCents: 25, maxStandardLength: 59 }, "Public Oligo pricing matches the strict under-60-base standard tier");
   assert.ok(Number.isInteger(startingSchedule.revision) && startingSchedule.revision > 0);
   initialPricingRevision = String(startingSchedule.revision);
   const stamp = Date.now();
@@ -500,10 +501,11 @@ async function main() {
   assert.match(await (await request(`/api/results/${resultId}`, customer)).text(), /Corrected synthetic result/);
   const schedule = await (await request("/api/pricing")).json();
   assert.equal(schedule.revision, startingSchedule.revision);
-  const update = { ...schedule, rates: { ...schedule.rates, "plasmid-plate": 650 }, reason: "Isolated pricing regression" };
+  const update = { revision: schedule.revision, rates: { ...schedule.rates, "plasmid-plate": 650 }, reason: "Isolated pricing regression" };
   assert.equal((await request("/api/admin/pricing", "", update, "PUT")).status, 403);
   assert.equal((await request("/api/admin/pricing", customer, update, "PUT")).status, 403);
   assert.equal((await request("/api/admin/pricing", admin, { ...update, rates: { ...update.rates, "plasmid-plate": -1 } }, "PUT")).status, 400);
+  assert.equal((await request("/api/admin/pricing", admin, { ...update, oligo: schedule.oligo }, "PUT")).status, 400, "Public Oligo pricing metadata is not an editable sequencing rate");
   const changed = await request("/api/admin/pricing", admin, update, "PUT");
   assert.equal(changed.status, 200); assert.equal((await changed.json()).revision, schedule.revision + 1);
   assert.equal((await request("/api/admin/pricing", admin, update, "PUT")).status, 409);

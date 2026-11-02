@@ -9,3 +9,6 @@
 /* Keep paired tube/plate prices readable at narrow widths. */
 .price-row{gap:12px}.price-row>span{min-width:0}.price-row b{flex-shrink:0;white-space:nowrap;text-align:right;font-size:22px}
 @media(max-width:760px){.price-row b{font-size:18px}}
+
+/* Three service tabs share the available width on desktop and mobile. */
+.console-tabs{gap:12px}.console-tabs button{flex:1;min-width:0;text-align:left;line-height:1.45}

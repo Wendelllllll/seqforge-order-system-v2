@@ -77,6 +77,46 @@ test("nonstandard scales, purification and any modification require separate quo
   }
 });
 
+test("standard pricing stops before 60 normalized bases while longer oligos remain valid quote requests", () => {
+  for (const length of [59, 60, 61]) {
+    const oligo = { ...item(), sequence: ` ${"a".repeat(30)}\n${"c".repeat(length - 30)} ` };
+    const draft = { ...order(), oligos: [oligo] };
+    assert.equal(orderSchema.safeParse(draft).success, true, `${length} bases can still be submitted`);
+    assert.equal(hasStandardOligoPrice(oligo), length < 60);
+    const estimate = priceOrder(draft);
+    assert.equal(estimate.pendingQuote, length >= 60);
+    assert.equal(estimate.subtotalCents, length < 60 ? length * 25 : null);
+    assert.equal(estimate.quoteApprovalRequired, true);
+    if (length < 60) {
+      assert.deepEqual(estimate.lines.map(line => [line.quantity, line.unitCents, line.amountCents]), [[59, 25, 1475]]);
+      assert.equal(estimate.unpricedItems, undefined);
+    } else {
+      assert.deepEqual(estimate.lines, []);
+      assert.deepEqual(estimate.unpricedItems, [oligo.name]);
+      assert.equal(estimate.knownSubtotalCents, undefined);
+    }
+    assert.equal(pricingSchema.safeParse(estimate).success, true);
+  }
+});
+
+test("mixed lengths and custom specifications price only eligible short oligos", () => {
+  const oligos = [
+    { ...item(), name: "Short", sequence: "A".repeat(59) },
+    { ...item(), name: "At-limit", sequence: "A".repeat(60) },
+    { ...item(), name: "Long", sequence: "A".repeat(61) },
+    { ...item(), name: "Short-HPLC", sequence: "A".repeat(59), purification: "HPLC" as const },
+    { ...item(), name: "Short-modified", sequence: "A".repeat(59), modification5: "Phosphate" },
+  ];
+  const quote = priceOrder({ ...order(), submissionMode: "Oligo modified", oligos });
+  assert.equal(quote.pendingQuote, true);
+  assert.equal(quote.subtotalCents, null);
+  assert.equal(quote.knownSubtotalCents, 1475);
+  assert.equal(quote.lines.length, 1);
+  assert.equal(quote.lines[0].quantity, 59);
+  assert.deepEqual(quote.unpricedItems, ["At-limit", "Long", "Short-HPLC", "Short-modified"]);
+  assert.equal(pricingSchema.safeParse(quote).success, true);
+});
+
 test("mixed oligos show only the standard portion while the final total remains unknown", () => {
   const quote = priceOrder({ ...order(), submissionMode: "Oligo modified", oligos: [item(), { ...item(), name: "Custom-R", purification: "HPLC", modification5: "Phosphate" }] });
   assert.equal(quote.pendingQuote, true);
@@ -97,6 +137,16 @@ test("historical oligo quote snapshots remain unknown instead of receiving new s
   assert.deepEqual(pricingSchema.parse(original), original);
   assert.equal(pricingSchema.safeParse({ ...original, subtotalCents: 0 }).success, false);
   assert.equal(pricingSchema.safeParse({ ...original, pendingQuote: false }).success, false);
+});
+
+test("historical priced oligos keep their saved amount even above the new length threshold", () => {
+  const original = {
+    version: "seqforge-oligo-standard-25c-2026-10", currency: "USD", unit: "base", pendingQuote: false,
+    quoteApprovalRequired: true,
+    lines: [{ description: "Existing 80-base oligo", quantity: 80, unitCents: 25, amountCents: 2000 }],
+    subtotalCents: 2000, reviewReasons: ["Original pricing terms"],
+  };
+  assert.deepEqual(pricingSchema.parse(original), original);
 });
 
 test("admin can find oligo requests but cannot start production before quote approval", () => {

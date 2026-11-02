@@ -9,7 +9,7 @@ export const RATE_CENTS = {
   Tubes: { Standard: 550, "Pre-mixed": 450, "Ready to load": 350 },
 } as const;
 export const WHOLE_PLASMID_UNIT_CENTS = 500;
-export const OLIGO_PRICING_VERSION = "seqforge-oligo-standard-25c-2026-10";
+export const OLIGO_PRICING_VERSION = "seqforge-oligo-standard-under60-25c-2026-11";
 
 export const pricingSchema = z.object({
   version: z.string(), currency: z.literal("USD"),

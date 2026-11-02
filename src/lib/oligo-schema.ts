@@ -6,7 +6,8 @@ export const OLIGO_FORMATS = ["Dry", "Resuspended"] as const;
 export const MAX_OLIGOS = 250;
 export const OLIGO_QUOTE_NOTICE = "Price pending lab confirmation. Production starts only after you approve the quote. Requested specifications, delivery, taxes and shipping will be confirmed by the lab.";
 export const OLIGO_BASE_RATE_CENTS = 25;
-export const OLIGO_BASE_PRICE_NOTICE = "Standard DNA oligos at 25 nmol with Desalted purification and no modifications are $0.25 per base. Other scales, purification and modifications require a separate quote. Delivery form, taxes and shipping require lab confirmation. Production starts only after you approve the final quote.";
+export const OLIGO_STANDARD_MAX_BASES = 59;
+export const OLIGO_BASE_PRICE_NOTICE = `Standard DNA oligos shorter than ${OLIGO_STANDARD_MAX_BASES + 1} bases at 25 nmol with Desalted purification and no modifications are $0.25 per base. Oligos of ${OLIGO_STANDARD_MAX_BASES + 1} bases or longer, other scales, purification and modifications require a separate quote. Delivery form, taxes and shipping require lab confirmation. Production starts only after you approve the final quote.`;
 
 const modification = z.string().trim().max(200);
 export const oligoSchema = z.object({
@@ -33,7 +34,8 @@ export function hasOligoModifications(item: OligoDraft) {
   return Boolean(item.modification5.trim() || item.modification3.trim() || item.modificationInternal.trim());
 }
 export function hasStandardOligoPrice(item: OligoDraft) {
-  return item.synthesisScale === "25 nmol" && item.purification === "Desalted" && !hasOligoModifications(item);
+  const length = item.sequence.replace(/\s/g, "").length;
+  return length > 0 && length <= OLIGO_STANDARD_MAX_BASES && item.synthesisScale === "25 nmol" && item.purification === "Desalted" && !hasOligoModifications(item);
 }
 export function oligoCount(value: unknown) { return readOligoSnapshot(value)?.items.length ?? 0; }
 

@@ -10,38 +10,48 @@
     nanopore:[
       {name:'Whole plasmid ≤12 kb',description:'Up to 12,000 bp, including 12 kb',keys:['plasmid-tubes','plasmid-plate']},
       {name:'Whole plasmid >12 kb',description:'Larger than 12,000 bp',keys:['plasmid-large-tubes','plasmid-large-plate']}
+    ],
+    oligo:[
+      {name:'Standard DNA',description:'Under 60 bp · 25 nmol · Desalted · Unmodified',keys:[],type:'standard'},
+      {name:'Other specifications',description:'60 bp or longer, other scales, purification or modifications',keys:[],quote:true}
     ]
   };
-  let pricingService='sanger',pricingFormat='Standard',rates=null,priceUnavailable=false;
+  const priceServices={sanger:{label:'Sanger',tab:'price-tab-sanger'},nanopore:{label:'Whole Plasmid',tab:'price-tab-nano'},oligo:{label:'Oligo',tab:'price-tab-oligo'}};
+  let pricingService='sanger',pricingFormat='Standard',rates=null,oligoPrice=null,priceUnavailable=false;
   const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
   function updatePriceSelection(){
     const option=priceData[pricingService].find(row=>row.name===pricingFormat);
-    document.querySelector('#price-selection').textContent=(pricingService==='sanger'?'Sanger':'Whole Plasmid')+' / '+(option.type?option.name:option.name.replace('Whole plasmid ',''));
-    document.querySelector('#price-unit').textContent=pricingService==='sanger'?'USD / reaction':'USD / sample';
-    document.querySelector('#quote-link').href=pricingService==='sanger'?'/orders/new?service=sanger&type='+option.type:'/orders/new?service=whole-plasmid';
-    document.querySelector('#price-status').textContent=priceUnavailable?'Prices are temporarily unavailable. Please reload or check the order form.':!rates?'Loading current prices…':pricingService==='sanger'?'Current sequencing rates. Each primer reaction is charged separately. Taxes, shipping and additional services are excluded.':'Current rates for purified plasmid DNA. Enter the expected size when ordering; unknown sizes need lab confirmation. Taxes, shipping and additional services are excluded.';
+    document.querySelector('#price-selection').textContent=priceServices[pricingService].label+' / '+(option.type?option.name:option.name.replace('Whole plasmid ',''));
+    document.querySelector('#price-unit').textContent=pricingService==='oligo'?(option.quote?'Quote required':'USD / base'):pricingService==='sanger'?'USD / reaction':'USD / sample';
+    document.querySelector('#quote-link').href=pricingService==='oligo'?'/orders/new?service=oligo'+(option.type?'&type='+option.type:''):pricingService==='sanger'?'/orders/new?service=sanger&type='+option.type:'/orders/new?service=whole-plasmid';
+    document.querySelector('#quote-link').textContent=option.quote?'Request a quote':'Start an order';
+    document.querySelector('#price-status').textContent=pricingService==='oligo'&&option.quote?'Send your sequences and specifications. Our team will confirm the quote before production. Taxes and shipping are excluded.':priceUnavailable?'Prices are temporarily unavailable. Please reload or check the order form.':!rates?'Loading current prices…':pricingService==='oligo'?'Standard pricing applies to DNA oligos under '+(oligoPrice.maxStandardLength+1)+' bp, at 25 nmol with desalting and no modifications. Other specifications require a quote. Taxes and shipping are excluded.':pricingService==='sanger'?'Current sequencing rates. Each primer reaction is charged separately. Taxes, shipping and additional services are excluded.':'Current rates for purified plasmid DNA. Enter the expected size when ordering; unknown sizes need lab confirmation. Taxes, shipping and additional services are excluded.';
   }
   function activatePrice(service,keepSelection=false){
     pricingService=service;
     if(!keepSelection)pricingFormat=priceData[service][0].name;
     const options=document.querySelector('#price-options');options.replaceChildren();
-    priceData[service].forEach(({name,description,keys})=>{
+    priceData[service].forEach(({name,description,keys,quote})=>{
       const selected=name===pricingFormat,b=document.createElement('button');b.type='button';b.className='price-row'+(selected?' selected':'');b.dataset.format=name;b.setAttribute('aria-pressed',String(selected));
-      const span=document.createElement('span');span.append(document.createTextNode(name));const small=document.createElement('small');small.textContent=description;span.append(small);
+      const span=document.createElement('span');span.append(document.createTextNode(name));const small=document.createElement('small');small.textContent=service==='oligo'&&oligoPrice?(quote?(oligoPrice.maxStandardLength+1)+' bp or longer, other scales, purification or modifications':'Under '+(oligoPrice.maxStandardLength+1)+' bp · 25 nmol · Desalted · Unmodified'):description;span.append(small);
       const price=document.createElement('b');
-      if(rates){price.append(document.createTextNode(money.format(rates[keys[0]]/100)+' tubes'));const plate=document.createElement('small');plate.textContent=money.format(rates[keys[1]]/100)+' plate';price.append(plate)}
+      if(quote)price.textContent='Quote';
+      else if(service==='oligo'&&oligoPrice){price.append(document.createTextNode(money.format(oligoPrice.unitCents/100)));const unit=document.createElement('small');unit.textContent='/ base';price.append(unit)}
+      else if(rates&&service!=='oligo'){price.append(document.createTextNode(money.format(rates[keys[0]]/100)+' tubes'));const plate=document.createElement('small');plate.textContent=money.format(rates[keys[1]]/100)+' plate';price.append(plate)}
       else price.textContent=priceUnavailable?'Unavailable':'Loading…';
       b.append(span,price);options.append(b);
     });
-    document.querySelectorAll('[data-price]').forEach(b=>{const active=b.dataset.price===service;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1});document.querySelector('#price-panel').setAttribute('aria-labelledby',service==='sanger'?'price-tab-sanger':'price-tab-nano');updatePriceSelection();
+    document.querySelectorAll('[data-price]').forEach(b=>{const active=b.dataset.price===service;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1});document.querySelector('#price-panel').setAttribute('aria-labelledby',priceServices[service].tab);updatePriceSelection();
   }
-  document.querySelectorAll('[data-price]').forEach((b,i)=>{b.addEventListener('click',()=>activatePrice(b.dataset.price));b.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?1:1-i;const target=document.querySelectorAll('[data-price]')[next];activatePrice(target.dataset.price);target.focus()}})});
+  const priceTabs=[...document.querySelectorAll('[data-price]')];
+  priceTabs.forEach((b,i)=>{b.addEventListener('click',()=>activatePrice(b.dataset.price));b.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?priceTabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+priceTabs.length)%priceTabs.length;const target=priceTabs[next];activatePrice(target.dataset.price);target.focus()}})});
   document.querySelector('#price-options').addEventListener('click',e=>{const b=e.target.closest('[data-format]');if(!b)return;pricingFormat=b.dataset.format;document.querySelectorAll('.price-row').forEach(row=>{const active=row===b;row.classList.toggle('selected',active);row.setAttribute('aria-pressed',String(active))});updatePriceSelection()});
   activatePrice('sanger');
   fetch('/api/pricing',{cache:'no-store'}).then(response=>{if(!response.ok)throw new Error('Prices unavailable');return response.json()}).then(schedule=>{
     const keys=Object.values(priceData).flatMap(rows=>rows.flatMap(row=>row.keys));
     if(!schedule.rates||!keys.every(key=>Number.isInteger(schedule.rates[key])&&schedule.rates[key]>=0))throw new Error('Incomplete prices');
-    rates=schedule.rates;activatePrice(pricingService,true);
+    if(!schedule.oligo||!Number.isInteger(schedule.oligo.unitCents)||schedule.oligo.unitCents<0||!Number.isInteger(schedule.oligo.maxStandardLength)||schedule.oligo.maxStandardLength<1)throw new Error('Incomplete oligo prices');
+    rates=schedule.rates;oligoPrice=schedule.oligo;activatePrice(pricingService,true);
   }).catch(()=>{priceUnavailable=true;activatePrice(pricingService,true)});
   const steps=[['01 / SUBMIT','Ready at your bench.','Confirm your sample requirements, label each tube, and arrange drop-off or pickup with our team.'],['02 / RUN','A little sample. A lot of science.','Your sample moves through preparation and the sequencing workflow selected for your project.'],['03 / RESULTS','Your next question starts here.','Review the sequence data and analysis delivered for your service, then plan your next experiment.']];let journeyTimers=[];
   function clearJourney(){journeyTimers.forEach(clearTimeout);journeyTimers=[]}
